@@ -12,13 +12,41 @@ import pandas as pd
 access_key = 'AKIAJW3Q6QOU2DLIWVVA'
 secret_key = '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'
 from boto.s3.connection import S3Connection
-DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
+#DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
+DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
+
 import tarfile
 import gzip
 import matplotlib.pyplot as plt
 directory = os.fsencode(DOWNLOAD_LOCATION_PATH)
 tempdf = pd.read_csv(DOWNLOAD_LOCATION_PATH+'binance.csv')
 validpairs = tempdf['PairNameApi']
+
+
+def bid_ask_spread(df):
+    bids = df.loc[df['type'] == 'b']
+    asks = df.loc[df['type'] == 'a']
+    return bids.nlargest(1, 'price'), asks.nlargest(1,'price')
+
+def reformatdf(df):
+    return df.drop(columns=['type'])
+
+def calc_diff(cf, pf):
+    bids = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'b']))
+    asks = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'a']))
+    pbids = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'b']))
+    pasks = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'a']))
+
+    a = asks.sub(pasks)
+    b = bids.sub(pbids)
+    return b,a
+
+
+
+def convert_df_bins(d2):
+    d2['bins'] = pd.cut(d2.price, 15)
+    return d2.groupby('bucket').sum()
+
 
 
 def inst_vwap(x):
@@ -35,11 +63,12 @@ def gen_order_book_tar(pair, month, year):
     return ex + '_' + pair+bnfxt+year+'_'+month+'.tar'
 
 
-def gen_pdf(xhist):
-    hist_dist = scipy.stats.rv_histogram(xhist)
+# def gen_pdf(xhist):
+#    hist_dist = scipy.stats.rv_histogram(xhist)
 
 
 def rec_check_dir(x, fil):
+    diff_mode = True
     for root, dirs, files in os.walk(x):
         for filename in files:
             filename = os.fsdecode(filename)
@@ -52,18 +81,28 @@ def rec_check_dir(x, fil):
                 text_dates = pd.to_datetime(cur_dates, unit='ms')
 
                 dcount = 0
+                pf = pd.DataFrame()
                 for cur_date in cur_dates:
                     dataFrame = df[dstr]
                     cf = dataFrame.loc[dataFrame['date'] == cur_date]
+                    if dcount>0 and diff_mode and dcount< len(cur_dates):
+                        bids_diff, asks_diff = calc_diff(cf, pf) # calculate arrival between previous and current dataframes
+                        amounts_diff = pd.concat([bids_diff.price, asks_diff.price])
+                    else:
+                        amounts_diff = cf['amount']
+
+                    pf = cf
                     cr = cf['type'].replace('a', 'red')
                     cr = cr.replace('b', 'blue').tolist()
                     plt.clf()
                     histprice = cf['price']
                     if filesplit[1].endswith('BTC'):
                         histprice = histprice.multiply(10000)
-                    print('size %s %s', histprice.size, len(cr))
-                    N, bins, patches = plt.hist(histprice, histprice.size, weights=cf['amount'])
-                    plt.title(str(text_dates[dcount])+' vp'+str(inst_vwap(cf)))
+                    print('size {0} {1}'.format(histprice.size, len(cr)))
+                    N, bins, patches = plt.hist(histprice, histprice.size, weights=amounts_diff)
+                    b, a = bid_ask_spread(cf)
+                    print('bid ask'+str(b.price.tolist()[0])+' '+str(a.price.tolist()[0]))
+                    plt.title(str(text_dates[dcount])+' vp'+str(inst_vwap(cf))+'ba'+str(b.price.tolist()[0]))
                     cc = 0
                     for p in patches:
                         if cc < len(cr):
@@ -97,4 +136,4 @@ def untarfile(file, dir):
     tar.close()
 
 
-rec_check_dir(DOWNLOAD_LOCATION_PATH, gen_order_book_tar('ADAUSDT','07', '2018'))
+rec_check_dir(DOWNLOAD_LOCATION_PATH, gen_order_book_tar('XRPUSDT','07', '2018'))
