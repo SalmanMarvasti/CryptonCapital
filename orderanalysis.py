@@ -12,8 +12,8 @@ import pandas as pd
 access_key = 'AKIAJW3Q6QOU2DLIWVVA'
 secret_key = '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'
 from boto.s3.connection import S3Connection
-#DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
-DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
+DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
+#DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
 
 import tarfile
 import gzip
@@ -31,11 +31,11 @@ def bid_ask_spread(df):
 def reformatdf(df):
     return df.drop(columns=['type'])
 
-def calc_diff(cf, pf):
-    bids = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'b']))
-    asks = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'a']))
-    pbids = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'b']))
-    pasks = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'a']))
+def calc_diff(cf, pf, bins):
+    bids = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'b']), bins)
+    asks = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'a']), bins)
+    pbids = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'b']), bins)
+    pasks = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'a']), bins)
 
     a = asks.sub(pasks)
     b = bids.sub(pbids)
@@ -43,9 +43,11 @@ def calc_diff(cf, pf):
 
 
 
-def convert_df_bins(d2):
-    d2['bins'] = pd.cut(d2.price, 15)
-    return d2.groupby('bucket').sum()
+def calculate_bins_ticksize(p):
+     x = np.histogram_bin_edges(p, 'fd')
+     return x
+
+
 
 
 
@@ -55,7 +57,7 @@ def inst_vwap(x):
 def gen_order_book_file(pair, day, month, year, trade):
     ex = 'Binance'
     bnfxt = '_ob_10_'
-    return ex + '_' + pair+bnfxt+year+'_'+month + '_' + day
+    return ex + '_' + pair+bnfxt+year+'_'+month + '_' + day # +CSV.GZ
 
 def gen_order_book_tar(pair, month, year):
     ex = 'Binance'
@@ -86,7 +88,9 @@ def rec_check_dir(x, fil):
                     dataFrame = df[dstr]
                     cf = dataFrame.loc[dataFrame['date'] == cur_date]
                     if dcount>0 and diff_mode and dcount< len(cur_dates):
-                        bids_diff, asks_diff = calc_diff(cf, pf) # calculate arrival between previous and current dataframes
+                        cprices = cf.price.as_matrix()
+                        bins = calculate_bins_ticksize(cprices)
+                        bids_diff, asks_diff = calc_diff(cf, bins) # calculate arrival between previous and current dataframes
                         amounts_diff = pd.concat([bids_diff.price, asks_diff.price])
                     else:
                         amounts_diff = cf['amount']
@@ -135,5 +139,6 @@ def untarfile(file, dir):
     return dic
     tar.close()
 
+if __name__ == "__main__":
 
-rec_check_dir(DOWNLOAD_LOCATION_PATH, gen_order_book_tar('XRPUSDT','07', '2018'))
+    rec_check_dir(DOWNLOAD_LOCATION_PATH, gen_order_book_tar('EOSSDT','10', '2018'))
