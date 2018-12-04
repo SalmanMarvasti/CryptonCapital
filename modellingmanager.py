@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import urllib, json
+import pickle
 from collections import namedtuple
 import datetime as dt
 import time
@@ -37,6 +38,9 @@ def convert_to_ndarray(k, ctime: int):
 
     return mya
 
+
+FIXTIC = 0.015625
+
 class modellingmanager:
 
 
@@ -49,13 +53,13 @@ class modellingmanager:
         self.latestob = {}
         self.updateurl = "https://api.binance.com/api/v1/depth?symbol="
         self.tradeeurl = "https://api.binance.com/api/v1/trades?symbol="
-                # .queue = connredis('redis.pinksphere.com')
+                # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
         self.tradewindow_sec = 300
         self.blo_probs = []
         self.alo_probs = []
-        self.tick = 0.01
+        self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
         self.df = pd.DataFrame()
 
@@ -70,6 +74,10 @@ class modellingmanager:
         print('doane_tick' + str(x) + ' sprd' + str(baspread) + ' fdtick' + str(y))
 
         return best
+
+    def saveobjecttofile(self):
+        with open(self.tradingpair, 'wb') as output:
+            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
 
     def getlatestob(self,sfile, obfile, pfile):
         with urllib.request.urlopen(self.updateurl+self.tradingpair) as url:
@@ -114,10 +122,11 @@ class modellingmanager:
         self.bins = np.histogram_bin_edges(orderbook_pricelevels, bins='fd')
         dfbids = pd.DataFrame({'price':self.bids[:,0] - self.mid, 'amount':self.bids[:,1],})
         dfasks = pd.DataFrame({'price': self.asks[:, 0]- self.mid, 'amount': self.asks[:, 1], })
-        self.tick = self.bins[1]-self.bins[0]
+        tick = self.bins[1]-self.bins[0]
         self.bins = np.histogram_bin_edges(orderbook_pricelevels, bins='doane')
         tick_do = self.bins[1] - self.bins[0]
-        self.tick = self.choosetick(tick_do/2, self.tick/3)
+        if self.tick==FIXTIC:
+            self.tick = self.choosetick(tick_do/2, tick/3)
         self.bins = np.arange(dfbids['price'].min(), dfasks['price'].max(), self.tick)
         mdf = pd.concat([dfbids,dfasks], ignore_index=True)
         try:
@@ -126,12 +135,18 @@ class modellingmanager:
         except Exception as e:
             print(e)
         self.df = nfs
+
+
+        # with open('dataframe', 'w') as outfile:
+        #
+        #     json.dump(latest_ob, outfile)
+
         prob_blo_live = (sum_bids[1]-sell_sum[1])/(sum_bids[1])
         prob_alo_live = (sum_asks[1] - buy_sum[1]) / (sum_asks[1])
         np.savetxt(sfile, filtorders, fmt="%20.14f",delimiter=',')
         np.savetxt(obfile, self.bids, fmt="%20.14f", delimiter=',')
         np.savetxt(obfile, self.asks, fmt="%20.14f", delimiter=',')
-        nn = np.array([[current_time * 100, prob_blo_live, prob_alo_live]])
+        nn = np.array([[current_time * 1000, prob_blo_live, prob_alo_live]])
         np.savetxt(pfile, nn, fmt="%10.4f", delimiter=',')
         self.blo_probs.append(prob_blo_live)
         self.alo_probs.append(prob_alo_live)
@@ -176,8 +191,8 @@ if __name__ == "__main__":
     tp.market = "Binance"
     cr = modellingmanager(tp)
     fp = open(str(tp.name)+'prob2.csv', 'ab')
-    f = open('marketorders2.csv', 'ab')
-    fob = open('orderbooks2.csv', 'ab')
+    f = open(str(tp.name)+'marketorders2.csv', 'ab')
+    fob = open(str(tp.name)+'orderbooks2.csv', 'ab')
     l = task.LoopingCall(cr.getlatestob,f,fob,fp)
     l.start(cr.tradewindow_sec)  # call every tradewindow_sec seconds
 

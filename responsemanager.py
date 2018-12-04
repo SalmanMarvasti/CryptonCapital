@@ -20,7 +20,7 @@ q = queue.Queue(BUF_SIZE)
 
 
 class RequestThread(threading.Thread):
-    def __init__(self, group=None, target=None, name=None,
+    def __init__(self, group=None, target='test', name=None,
                  args=(), kwargs=None, verbose=None):
         super(RequestThread, self).__init__()
         self.target = target
@@ -33,14 +33,14 @@ class RequestThread(threading.Thread):
                 credentials.secret = "Test@123"
                 credentials.endpoint = "redis.pinksphere.com"
                 cr = PublishServer(credentials)
-                cr.read('tradesizerequest')
+                cr.read(self.target)
 
                 time.sleep(random.random())
         return
 
 
 class ResponseThread(threading.Thread):
-    def __init__(self, group=None, target=None, name=None,
+    def __init__(self, group=None, target='test', name=None,
                  args=(), kwargs=None, verbose=None):
         super(ResponseThread, self).__init__()
         self.target = target
@@ -52,14 +52,15 @@ class ResponseThread(threading.Thread):
             if not q.empty():
 
                 logging.debug('Running PublishServer class'
-                              + ' : ' + str(q.qsize()) + ' items in queue')
+                              + ' : ' + str(q.qsize()) + ' items in redis')
                 credentials.api = "1f28b5ccdec84a30bbd0231bb210c7d7"
                 credentials.secret = "Test@123"
                 credentials.endpoint = "redis.pinksphere.com"
                 cr = PublishServer(credentials)
-                cr.publish('tradesizeresponse')
+                cr.publish(self.target)
 
                 time.sleep(random.random())
+        time.sleep(1)
         return
 
 
@@ -101,23 +102,25 @@ class PublishServer:
         self.api = acct.api
         self.secret = acct.secret
         self.endpoint = acct.endpoint
-        self.queue = connredis('redis.pinksphere.com')
-        r = self.queue
+        self.redis = connredis('redis.pinksphere.com')
+        #r = self.redis
 
-    def publish(self, query='test', isjson=False, **args):
+    def publish(self, chann='test', isjson=False, **args):
         global r
         channel = r.pubsub()
         i = 0
         while True:
-            print('published'+str(i))
+
             pfill = 0.7
             tradearray = [5]
             tradetype = 'buy'
             item = q.get()
+            logging.debug('response item'+str(item))
             jl = json.loads(item)
+            print('published' + str(i)+item)
             mydict = {'id': jl['id'], 'no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2 , -3], 'prob_fill': pfill }
             rval = json.dumps(mydict)
-            try_command(r.publish,query, rval)
+            try_command(r.publish,chann, rval)
             time.sleep(0.5)
             i = i + 1
 
@@ -131,17 +134,18 @@ class PublishServer:
         c = 0
 
         while c<10:
-            print('get_message')
+
             message = try_command(p.get_message)
             # message = p.get_message()
-            if message:
+            if message and message['type']=='message':
+                print('received publish and getting message')
                 item = message['data']
                 print( "Subscriber: %s" % item)
-                q.put(message['data'])
+                q.put(str(message['data'].decode('utf-8')))
                 logging.debug('Putting ' + str(item)
-                              + ' : ' + str(q.qsize()) + ' items in queue')
+                              + ' : ' + str(q.qsize()) + ' items in redis')
 
-            time.sleep(1)
+            #time.sleep(1)
 
 
 
@@ -158,12 +162,12 @@ if __name__ == "__main__":
     for i in range(1, 10):
         mydict['id'] = random.random()
         q.put(json.dumps(mydict))
-    # p = ProducerThread(name='producer')
+    p = RequestThread(name='request')
     c = ResponseThread(name='response')
 
     c.start()
     time.sleep(2)
-    # c.start()
+    p.start()
     time.sleep(2)
 
 
