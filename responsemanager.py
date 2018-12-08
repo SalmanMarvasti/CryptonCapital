@@ -6,6 +6,7 @@ import threading
 import logging
 import random
 import queue
+from modellingmanager import create_model, modellingmanager
 credentials = namedtuple('credentials', ('api', 'secret', 'endpoint'))
 r = redis.StrictRedis(host='localhost',  port=6379, db=0)
 max_retries = 10
@@ -105,6 +106,9 @@ class PublishServer:
         self.redis = connredis('redis.pinksphere.com')
         #r = self.redis
 
+    def readpickleddataframe(self, tpair, exch='Binance'):
+        return create_model(tpair, exch) # currently loads from file
+
 
     def publish(self, chann='test', isjson=False, **args):
         global r
@@ -118,19 +122,19 @@ class PublishServer:
             item = q.get()
             logging.debug('response item'+str(item))
             jl = json.loads(item)
-            ts = float(jl['trade_size'])
+            ts = float(jl['trade_size'][0])
             tradearray = []
             r = random.random()
             if r>0.5:
                 tradearray.append((0.3+(r*0.1)) * ts)
                 tradearray.append((0.3 - (r * 0.1)) * ts)
                 tradearray.append((0.3) * ts)
-            else
+            else:
                 tradearray.append(r * ts)
                 tradearray.append((1-r) * ts)
 
 
-            self.readpickleddataframe(jl['pair'])
+            o = self.readpickleddataframe(jl['pair'])
 
             mydict = {'id': jl['id'], 'no_blocks': 3, 'ticksize': 0.02, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2 , -3], 'prob_fill': pfill }
             rval = json.dumps(mydict)
@@ -176,12 +180,12 @@ if __name__ == "__main__":
     for i in range(1, 10):
         mydict['id'] = random.random()
         q.put(json.dumps(mydict))
-    p = RequestThread(name='request')
+    # p = RequestThread(name='request')
     c = ResponseThread(name='response')
 
     c.start()
     time.sleep(2)
-    p.start()
+    #p.start()
     time.sleep(2)
 
 
