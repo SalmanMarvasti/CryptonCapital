@@ -105,6 +105,7 @@ class PublishServer:
         self.redis = connredis('redis.pinksphere.com')
         #r = self.redis
 
+
     def publish(self, chann='test', isjson=False, **args):
         global r
         channel = r.pubsub()
@@ -112,13 +113,26 @@ class PublishServer:
         while True:
 
             pfill = 0.7
-            tradearray = [5]
+
             tradetype = 'buy'
             item = q.get()
             logging.debug('response item'+str(item))
             jl = json.loads(item)
-            print('published' + str(i)+item)
-            mydict = {'id': jl['id'], 'no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2 , -3], 'prob_fill': pfill }
+            ts = float(jl['trade_size'])
+            tradearray = []
+            r = random.random()
+            if r>0.5:
+                tradearray.append((0.3+(r*0.1)) * ts)
+                tradearray.append((0.3 - (r * 0.1)) * ts)
+                tradearray.append((0.3) * ts)
+            else
+                tradearray.append(r * ts)
+                tradearray.append((1-r) * ts)
+
+
+            self.readpickleddataframe(jl['pair'])
+
+            mydict = {'id': jl['id'], 'no_blocks': 3, 'ticksize': 0.02, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2 , -3], 'prob_fill': pfill }
             rval = json.dumps(mydict)
             try_command(r.publish,chann, rval)
             time.sleep(0.5)
@@ -155,7 +169,7 @@ if __name__ == "__main__":
     pfill = 0.7
     tradearray = [5]
     tradetype = 'buy'
-    mydict = {'id': random.randint(1,1000), 'no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2, -3],
+    mydict = {'id': random.randint(1,1000), 'pair':'EOSUSDT','no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2, -3],
               'prob_fill': pfill, 'ticksize':0.01}
 
     q.put(json.dumps(mydict))

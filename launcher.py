@@ -75,7 +75,7 @@ if __name__ == "__main__":
     df = pd.read_csv(DOWNLOAD_LOCATION_PATH + 'binance.csv')
     validpairs = df['PairNameApi']
     for pair in validpairs:
-        wargs = ["python", ""]
-        p2 = reactor.spawnProcess(Reader(), "python modellingmanager.py", wargs, env=None)
+        wargs = ["python", 'modellingmanager.py', pair]
+        p2 = reactor.spawnProcess(Reader(), "python", wargs, env=None)
 
     reactor.run()
