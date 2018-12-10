@@ -6,7 +6,7 @@ import threading
 import logging
 import random
 import queue
-from modellingmanager import create_model, modellingmanager
+from modellingmanager import create_model, modellingmanager, bitmexmanager
 credentials = namedtuple('credentials', ('api', 'secret', 'endpoint'))
 r = redis.StrictRedis(host='localhost',  port=6379, db=0)
 max_retries = 10
