@@ -20,7 +20,7 @@ BUF_SIZE = 100
 q = queue.Queue(BUF_SIZE)
 
 
-class RequestThread(threading.Thread):
+class ReadRequestResponseThread(threading.Thread):
     def __init__(self, group=None, target='test', name=None,
                  args=(), kwargs=None, verbose=None):
         super(RequestThread, self).__init__()
@@ -40,7 +40,7 @@ class RequestThread(threading.Thread):
         return
 
 
-class ResponseThread(threading.Thread):
+class RequestThread(threading.Thread):
     def __init__(self, group=None, target='test', name=None,
                  args=(), kwargs=None, verbose=None):
         super(ResponseThread, self).__init__()
@@ -58,7 +58,7 @@ class ResponseThread(threading.Thread):
                 credentials.secret = "Test@123"
                 credentials.endpoint = "redis.pinksphere.com"
                 cr = PublishServer(credentials)
-                cr.publish(self.target)
+                cr.publishdummy(self.target)
 
                 time.sleep(random.random())
         time.sleep(1)
@@ -106,11 +106,8 @@ class PublishServer:
         self.redis = connredis('redis.pinksphere.com')
         #r = self.redis
 
-    def readpickleddataframe(self, tpair, exch='Binance'):
-        return create_model(tpair, exch) # currently loads from file
 
-
-    def publish(self, chann='test', isjson=False, **args):
+    def publishdummy(self, chann='test', isjson=False, **args):
         global r
         channel = r.pubsub()
         i = 0
@@ -120,25 +117,12 @@ class PublishServer:
 
             tradetype = 'buy'
             item = q.get()
-            logging.debug('response item'+str(item))
+            logging.debug('requesting item'+str(item))
             jl = json.loads(item)
-            ts = float(jl['trade_size'][0])
-            tradearray = []
-            r = random.random()
-            if r>0.5:
-                tradearray.append((0.3+(r*0.1)) * ts)
-                tradearray.append((0.3 - (r * 0.1)) * ts)
-                tradearray.append((0.3) * ts)
-            else:
-                tradearray.append(r * ts)
-                tradearray.append((1-r) * ts)
 
 
-            o = self.readpickleddataframe(jl['pair'])
-
-            mydict = {'id': jl['id'], 'no_blocks': 3, 'ticksize': 0.02, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2 , -3], 'prob_fill': pfill }
             rval = json.dumps(mydict)
-            try_command(r.publish,chann, rval)
+            try_command(r.publishdummy,chann, rval)
             time.sleep(0.5)
             i = i + 1
 
@@ -156,7 +140,7 @@ class PublishServer:
             message = try_command(p.get_message)
             # message = p.get_message()
             if message and message['type']=='message':
-                print('received publish and getting message')
+                print('received publishdummy and getting message')
                 item = message['data']
                 print( "Subscriber: %s" % item)
                 q.put(str(message['data'].decode('utf-8')))
@@ -173,20 +157,16 @@ if __name__ == "__main__":
     pfill = 0.7
     tradearray = [5]
     tradetype = 'buy'
-    mydict = {'id': random.randint(1,1000), 'pair':'EOSUSDT','no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2, -3],
-              'prob_fill': pfill, 'ticksize':0.01}
+    mydict = {'id': random.randint(1,1000), 'pair':'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1, 'exchange':'Bitmex', 'tradesize':10, 'time_seconds': 120}
 
     q.put(json.dumps(mydict))
     for i in range(1, 10):
         mydict['id'] = random.random()
         q.put(json.dumps(mydict))
+    p = RequestThread(name='request')
+    # c = ResponseThread(name='response')
 
-    # p = RequestThread(name='request')
-    c = ResponseThread(name='response')
-
-    c.start()
-    time.sleep(2)
-    #p.start()
+    p.start()
     time.sleep(2)
 
 

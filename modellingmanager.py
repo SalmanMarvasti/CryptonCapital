@@ -13,7 +13,12 @@ from twisted.internet import reactor
 import os
 import time
 from atomicwrites import atomic_write
-
+import logging
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename='./modellingmanager.log',
+                    filemode='w')
 
 def create_model(pairname, exchange):
     tp.name = pairname
@@ -80,6 +85,7 @@ class modelob:
         self.filepath = './'
         self.forcast_estimate_time = 15
         self.SAVEDEBUG = True
+        logging.debug('{0} modelling manager started'.format(self.tradingpair))
 
 
     def loadfrompickle(self):
@@ -229,35 +235,42 @@ class bitmexmanager(modellingmanager):
 
 
     def getlatestob(self,sfile, obfile, pfile):
-        with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
 
-            current_time = time.time()
+        try:
+            with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
 
-            latest_ob= json.loads(url.read().decode())
+                current_time = time.time()
 
-            print(latest_ob)
-            # CONVERTS DATA TO NDARRAY AND GIVES COL NAMES
-            self.bids = convert_to_ndarray(latest_ob['bids'], current_time)
-            # self.bids[:,3] = np.zeros(len(self.bids))
-            #savebids = self.bids
-            #savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
+                latest_ob= json.loads(url.read().decode())
 
-            self.asks = convert_to_ndarray(latest_ob['asks'], current_time, 1)
-            # saveasks = self.asks
+                print(latest_ob)
+                # CONVERTS DATA TO NDARRAY AND GIVES COL NAMES
+                self.bids = convert_to_ndarray(latest_ob['bids'], current_time)
+                # self.bids[:,3] = np.zeros(len(self.bids))
+                #savebids = self.bids
+                #savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
 
-        with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
-            latest_mo = json.loads(url.read().decode())
-            print(latest_mo)
-            # with open('marketorders.json', 'w') as outfile:
-            #     json.dump(latest_mo, outfile)
-            mid = (self.asks[0,0] + self.bids[0,0])*0.5
-            temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
-            threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
-            filtorders = temporders[threshold]
-            self.marketorders = filtorders
-            print('no of market orders'+str(len(self.marketorders)))
-            buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
-            sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
+                self.asks = convert_to_ndarray(latest_ob['asks'], current_time, 1)
+                # saveasks = self.asks
+
+            with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
+                latest_mo = json.loads(url.read().decode())
+                print(latest_mo)
+                # with open('marketorders.json', 'w') as outfile:
+                #     json.dump(latest_mo, outfile)
+                mid = (self.asks[0,0] + self.bids[0,0])*0.5
+                temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
+                threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
+                filtorders = temporders[threshold]
+                self.marketorders = filtorders
+                print('no of market orders'+str(len(self.marketorders)))
+                buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
+                sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
+        except urllib.error.HTTPError as detail:
+            logging.info(self.tradingpair + ':' + str(detail))
+            if detail.errno in (401,500,404):
+                print('exception http')
+
         sum_bids = self.bids[0:6, :].sum(axis=0)
         sum_asks = self.asks[0:6, :].sum(axis=0)
         self.mid = mid
@@ -303,8 +316,6 @@ class bitmexmanager(modellingmanager):
         return
 
 
-        # self.trades = np.array([[float(y) for y in x] for x in latest_ob.bids])
-                #self.asks = np.array([[float(y) for y in x] for x in latest_ob.asks])
 
 
 

@@ -18,6 +18,7 @@ DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
 import tarfile
 import gzip
 import matplotlib.pyplot as plt
+import csv
 directory = os.fsencode(DOWNLOAD_LOCATION_PATH)
 tempdf = pd.read_csv(DOWNLOAD_LOCATION_PATH+'binance.csv')
 validpairs = tempdf['PairNameApi']
@@ -139,6 +140,76 @@ def untarfile(file, dir):
     return dic
     tar.close()
 
+
+import calendar, time
+from datetime import datetime
+
+def convert_utc_to_epoch(timestamp_string):
+    '''Use this function to convert utc to epoch'''
+    con = '2018-12-1 '+timestamp_string.rstrip('0')
+    if con[-1]=='.':
+        con = con + '0'
+
+    timestamp = datetime.strptime(con, '%Y-%m-%d %H:%M:%S.%f')
+
+    epoch = int(calendar.timegm(timestamp.utctimetuple()))
+    #print epoch
+    return epoch
+
 if __name__ == "__main__":
 
-    rec_check_dir(DOWNLOAD_LOCATION_PATH, gen_order_book_tar('EOSSDT','10', '2018'))
+    outFile = 'NEW_BITMEX_PERP_BTC_USD.csv'
+    inFile = 'BITMEX_PERP_BTC_USD.csv'
+    df = pd.read_csv(DOWNLOAD_LOCATION_PATH+'ob/'+inFile, delimiter=';')
+    ob = df.loc[df['update_type']=='SNAPSHOT']
+
+    ot = df.loc[df['update_type'] != 'SNAPSHOT']
+    new_ot = pd.DataFrame({'date':ot.time_exchange.apply(convert_utc_to_epoch), 'type': ot.is_buy, 'price':ot.entry_px, 'amount':ot.entry_sx},columns=['date', 'type', 'price', 'amount'])
+
+    new_ob = pd.DataFrame({'date':ob.time_exchange.apply(convert_utc_to_epoch), 'type': ob.is_buy, 'price':ob.entry_px, 'amount':ob.entry_sx},columns=['date', 'type', 'price', 'amount'])
+    #  new_ob.type = [0 if x else 1 for x in new_ob.type]
+    nob = new_ob.set_index('price')
+    cur_dates = new_ot['date'].unique()
+    nArray = np.empty((len(df)*10,4))
+    x = 0
+    print('going through dates')
+    output_path = DOWNLOAD_LOCATION_PATH+'ob/'+outFile
+    with open(output_path, "w") as file:
+        w = csv.writer(file)
+        w.writerow(['date', 'type', 'price', 'amount'])
+
+        for cdate in cur_dates:
+            temp_ot = new_ot.loc[new_ot.date==cdate]
+            temp_ot = temp_ot.set_index('price')
+
+            for i in range(0, len(temp_ot)):
+                row_to_append = temp_ot.iloc[i]
+                p = temp_ot.index[i] # this rows price
+
+                if nob.index.contains(p): # assume buy and ask correctly match
+                    #row_to_append.date = 0
+                    row_to_append['date'] = 0
+                    row_to_append['type'] = 0
+                    nob.loc[p]+=row_to_append   # ignores index column
+                else:
+                    nob.loc[p] = row_to_append
+            nob['date'] = cdate
+            print('writing nob'+str(x))
+            # csv_writer.writerow(nob.reset_index().values.tolist())
+            tnob = nob.reset_index()
+
+            w.writerows(tnob.values)
+
+            # if (x<nArray.shape[0]):
+            #     nArray[x:x+tnob.shape[0],0:] = tnob.values
+            # else:
+            #     print('warning slow append')
+            #     nArray = np.append(nArray, tnob.values)
+            # x = x + nob.shape[0]
+
+    print('finished appending')
+    # df = pd.DataFrame(data = nArray[0:x,:], columns=['date', 'type', 'price', 'amount'])
+    #fd.to_csv(DOWNLOAD_LOCATION_PATH+'ob/'+outFile, columns=['date', 'type', 'price', 'amount'])
+    #print(ob.is_buy)
+    #print(new_ob)
+    # rec_check_dir(DOWNLOAD_LOCATION_PATH, gen_order_book_tar('EOSSDT','10', '2018'))
