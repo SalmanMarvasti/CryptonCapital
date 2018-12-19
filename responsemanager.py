@@ -104,7 +104,7 @@ class PublishServer:
         self.secret = acct.secret
         self.endpoint = acct.endpoint
         self.redis = connredis('redis.pinksphere.com')
-        #r = self.redis
+        r = self.redis
 
     def readpickleddataframe(self, tpair, exch='Binance'):
         return create_model(tpair, exch) # currently loads from file
@@ -122,21 +122,28 @@ class PublishServer:
             item = q.get()
             logging.debug('response item'+str(item))
             jl = json.loads(item)
-            ts = float(jl['trade_size'][0])
+            ts = float(jl['tradesize'])
             tradearray = []
-            r = random.random()
-            if r>0.5:
-                tradearray.append((0.3+(r*0.1)) * ts)
-                tradearray.append((0.3 - (r * 0.1)) * ts)
+            rd = random.random()
+            if rd>0.5:
+                tradearray.append((0.3+(rd*0.1)) * ts)
+                tradearray.append((0.3 - (rd * 0.1)) * ts)
                 tradearray.append((0.3) * ts)
             else:
-                tradearray.append(r * ts)
-                tradearray.append((1-r) * ts)
+                tradearray.append(rd * ts)
+                tradearray.append((1-rd) * ts)
+
+            tradetype = jl['type']
 
 
             o = self.readpickleddataframe(jl['pair'])
 
-            mydict = {'id': jl['id'], 'no_blocks': 3, 'ticksize': 0.02, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2 , -3], 'prob_fill': pfill }
+            ticksaway = [0,-3, -2 , 0]
+
+
+            mydict = {'id': jl['id'], 'no_blocks': len(tradearray), 'ticksize': 0.50, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': o.probordercompletion(int(jl['time_seconds']),tradetype=='buy') }
+
+            print('publishing'+str(mydict))
             rval = json.dumps(mydict)
             try_command(r.publish,chann, rval)
             time.sleep(0.5)
@@ -173,20 +180,25 @@ if __name__ == "__main__":
     pfill = 0.7
     tradearray = [5]
     tradetype = 'buy'
-    mydict = {'id': random.randint(1,1000), 'pair':'EOSUSDT','no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2, -3],
-              'prob_fill': pfill, 'ticksize':0.01}
+    # mydict = {'id': random.randint(1,1000), 'pair':'EOSUSDT','no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2, -3],
+    #           'prob_fill': pfill, 'ticksize':0.01}
+    #
+    # q.put(json.dumps(mydict))
+    # for i in range(1, 10):
+    #     mydict['id'] = random.random()
+    #     q.put(json.dumps(mydict))
+    mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
+              'exchange': 'Bitmex', 'tradesize': 10, 'time_seconds': 120}
 
     q.put(json.dumps(mydict))
-    for i in range(1, 10):
-        mydict['id'] = random.random()
-        q.put(json.dumps(mydict))
 
-    # p = RequestThread(name='request')
-    c = ResponseThread(name='response')
+    p = RequestThread(name='request',target='tradesizerequest')
+    c = ResponseThread(name='response',target='tradesizeresponse')
 
     c.start()
     time.sleep(2)
-    #p.start()
+    p.start()
     time.sleep(2)
-
+    c.join()
+    p.join()
 

@@ -6,7 +6,7 @@ import threading
 import logging
 import random
 import queue
-from modellingmanager import create_model, modellingmanager, bitmexmanager
+# from modellingmanager import create_model, modellingmanager, bitmexmanager
 credentials = namedtuple('credentials', ('api', 'secret', 'endpoint'))
 r = redis.StrictRedis(host='localhost',  port=6379, db=0)
 max_retries = 10
@@ -23,7 +23,7 @@ q = queue.Queue(BUF_SIZE)
 class ReadRequestResponseThread(threading.Thread):
     def __init__(self, group=None, target='test', name=None,
                  args=(), kwargs=None, verbose=None):
-        super(RequestThread, self).__init__()
+        super(ReadRequestResponseThread, self).__init__()
         self.target = target
         self.name = name
 
@@ -43,7 +43,7 @@ class ReadRequestResponseThread(threading.Thread):
 class RequestThread(threading.Thread):
     def __init__(self, group=None, target='test', name=None,
                  args=(), kwargs=None, verbose=None):
-        super(ResponseThread, self).__init__()
+        super(RequestThread, self).__init__()
         self.target = target
         self.name = name
         return
@@ -104,7 +104,7 @@ class PublishServer:
         self.secret = acct.secret
         self.endpoint = acct.endpoint
         self.redis = connredis('redis.pinksphere.com')
-        #r = self.redis
+        # r = self.redis
 
 
     def publishdummy(self, chann='test', isjson=False, **args):
@@ -117,12 +117,13 @@ class PublishServer:
 
             tradetype = 'buy'
             item = q.get()
+            print(str(item))
             logging.debug('requesting item'+str(item))
             jl = json.loads(item)
 
 
             rval = json.dumps(mydict)
-            try_command(r.publishdummy,chann, rval)
+            try_command(r.publish,chann, rval)
             time.sleep(0.5)
             i = i + 1
 
@@ -163,10 +164,15 @@ if __name__ == "__main__":
     for i in range(1, 10):
         mydict['id'] = random.random()
         q.put(json.dumps(mydict))
-    p = RequestThread(name='request')
+    p = RequestThread(name='request', target='tradesizeresponse')
     # c = ResponseThread(name='response')
 
     p.start()
-    time.sleep(2)
+    time.sleep(7)
+    print('adding more stuff to queue')
+    for i in range(1, 10):
+        mydict['id'] = random.random()
+
+    p.join()
 
 
