@@ -230,16 +230,16 @@ def rewrite_cointick(inFile, outFile):
                     urow_to_append = temp_ot_up.iloc[i]
                     row_to_append['date'] = 0
                     row_to_append['type'] = 0
-                    if urow_to_append[0] == 'ADD':
+                    if urow_to_append == 'ADD':
                         nob.loc[p] += row_to_append  # ignores index column
                     else:
-                        if urow_to_append[0] == 'SUB':
+                        if urow_to_append == 'SUB':
                             nob.loc[p] -= row_to_append
                 else:
                     nob.loc[p] = row_to_append
             nob['date'] = cdate
             x = x + 1
-            print('writing nob' + str(x))
+            # print('writing nob' + str(x))
             # csv_writer.writerow(nob.reset_index().values.tolist())
             tnob = nob.reset_index()
             w.writerows(tnob.values)
@@ -258,8 +258,8 @@ if __name__ == "__main__":
 
     #outFile = 'NEW_BITMEX_PERP_BTC_USD2.csv'
     #inFile = 'BITMEX_PERP_BTC_USD.csv'
-    runTrades = True
-    runOrderBook = False
+    runTrades = False
+    runOrderBook = True
 
     tradepairfile = 'PERP_BTC'
 
