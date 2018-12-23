@@ -235,7 +235,7 @@ class bitmexmanager(modellingmanager):
 
 
     def getlatestob(self,sfile, obfile, pfile):
-
+        mid = 0
         try:
             with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
 
@@ -251,6 +251,8 @@ class bitmexmanager(modellingmanager):
                 #savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
 
                 self.asks = convert_to_ndarray(latest_ob['asks'], current_time, 1)
+                mid = (self.asks[0,0] + self.bids[0,0])*0.5
+        
                 # saveasks = self.asks
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
@@ -258,7 +260,7 @@ class bitmexmanager(modellingmanager):
                 print(latest_mo)
                 # with open('marketorders.json', 'w') as outfile:
                 #     json.dump(latest_mo, outfile)
-                mid = (self.asks[0,0] + self.bids[0,0])*0.5
+                
                 temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
                 threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
                 filtorders = temporders[threshold]
@@ -273,7 +275,8 @@ class bitmexmanager(modellingmanager):
 
         sum_bids = self.bids[0:6, :].sum(axis=0)
         sum_asks = self.asks[0:6, :].sum(axis=0)
-        self.mid = mid
+        if mid>0:
+            self.mid = mid
 
         if self.tick==FIXTIC:
             self.tick = 0.5 # self.choosetick(tick_do/2, 0.5)
