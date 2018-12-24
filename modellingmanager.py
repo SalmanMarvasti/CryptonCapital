@@ -72,12 +72,11 @@ class modelob:
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
             self.tradewindow_sec = 35 # bitmex trade window must be lower as buyer or seller is not specified
-
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([], maxlen=5)
-        self.alo_probs = deque([], maxlen=5)
+        self.blo_probs = deque([0.1], maxlen=5)
+        self.alo_probs = deque([0.1], maxlen=5)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -230,7 +229,7 @@ class modellingmanager(modelob):
 
 class bitmexmanager(modellingmanager):
     def __init__(self, acct):
-        modelob.__init__(self, acct)
+        modellingmanager.__init__(self, acct)
 
 
 
@@ -297,9 +296,9 @@ class bitmexmanager(modellingmanager):
         prob_blo_live = (sum_bids[1] - sell_order_per_sec) / (sum_bids[1])
         prob_alo_live = (sum_asks[1] - buy_order_per_sec) / (sum_asks[1])
         if prob_alo_live<0:
-            prob_alo_live = (1 + np.mean(alo_probs)) * 0.5
+            prob_alo_live = (1 + np.mean(self.alo_probs)) * 0.5
         if prob_blo_live<0:
-            prob_blo_live = (1 + np.mean(alo_probs)) * 0.5
+            prob_blo_live = (1 + np.mean(self.blo_probs)) * 0.5
 
         floatfmt = '%30.9f'
         timefmt = '%30.3f'

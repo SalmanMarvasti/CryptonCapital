@@ -12,8 +12,8 @@ import pandas as pd
 access_key = 'AKIAJW3Q6QOU2DLIWVVA'
 secret_key = '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'
 from boto.s3.connection import S3Connection
-DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
-#DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
+DOWNLOAD_LOCATION_PATH =  "d:/s3-backup/"
+#DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") +"/media/oem/CF7C-A41D" + "/s3-backup/"
 
 import tarfile
 import gzip
@@ -273,7 +273,7 @@ if __name__ == "__main__":
 
     if runOrderBook:
 
-        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/orderbook/'):
+        for root, dirs, files in os.walk('e:/bitmex/orderbook/'):
 
             for filename in files:
                 filename = os.fsdecode(filename)
