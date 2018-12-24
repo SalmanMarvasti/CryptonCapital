@@ -72,12 +72,11 @@ class modelob:
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
             self.tradewindow_sec = 35 # bitmex trade window must be lower as buyer or seller is not specified
-
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([], maxlen=5)
-        self.alo_probs = deque([], maxlen=5)
+        self.blo_probs = deque([0.1], maxlen=5)
+        self.alo_probs = deque([0.1], maxlen=5)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -230,12 +229,12 @@ class modellingmanager(modelob):
 
 class bitmexmanager(modellingmanager):
     def __init__(self, acct):
-        modelob.__init__(self, acct)
+        modellingmanager.__init__(self, acct)
 
 
 
     def getlatestob(self,sfile, obfile, pfile):
-
+        mid = 0
         try:
             with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
 
@@ -251,6 +250,8 @@ class bitmexmanager(modellingmanager):
                 #savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
 
                 self.asks = convert_to_ndarray(latest_ob['asks'], current_time, 1)
+                mid = (self.asks[0,0] + self.bids[0,0])*0.5
+        
                 # saveasks = self.asks
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
@@ -258,7 +259,7 @@ class bitmexmanager(modellingmanager):
                 print(latest_mo)
                 # with open('marketorders.json', 'w') as outfile:
                 #     json.dump(latest_mo, outfile)
-                mid = (self.asks[0,0] + self.bids[0,0])*0.5
+                
                 temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
                 threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
                 filtorders = temporders[threshold]
@@ -273,7 +274,8 @@ class bitmexmanager(modellingmanager):
 
         sum_bids = self.bids[0:6, :].sum(axis=0)
         sum_asks = self.asks[0:6, :].sum(axis=0)
-        self.mid = mid
+        if mid>0:
+            self.mid = mid
 
         if self.tick==FIXTIC:
             self.tick = 0.5 # self.choosetick(tick_do/2, 0.5)
@@ -294,9 +296,9 @@ class bitmexmanager(modellingmanager):
         prob_blo_live = (sum_bids[1] - sell_order_per_sec) / (sum_bids[1])
         prob_alo_live = (sum_asks[1] - buy_order_per_sec) / (sum_asks[1])
         if prob_alo_live<0:
-            prob_alo_live = (1 + np.mean(alo_probs)) * 0.5
+            prob_alo_live = (1 + np.mean(self.alo_probs)) * 0.5
         if prob_blo_live<0:
-            prob_blo_live = (1 + np.mean(alo_probs)) * 0.5
+            prob_blo_live = (1 + np.mean(self.blo_probs)) * 0.5
 
         floatfmt = '%30.9f'
         timefmt = '%30.3f'

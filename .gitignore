@@ -1,3 +1,5 @@
 *.csv
 df
 *.pkl
+/modellingmanager.log
+/bitmexweb1.py
