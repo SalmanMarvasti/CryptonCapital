@@ -12,8 +12,8 @@ import pandas as pd
 access_key = 'AKIAJW3Q6QOU2DLIWVVA'
 secret_key = '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'
 from boto.s3.connection import S3Connection
-DOWNLOAD_LOCATION_PATH =  "d:/s3-backup/"
-#DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") +"/media/oem/CF7C-A41D" + "/s3-backup/"
+DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
+#DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
 
 import tarfile
 import gzip
@@ -156,12 +156,13 @@ def gen_date_prefix(strpath):
 def convert_utc_to_epoch(timestamp_string):
     '''Use this function to convert utc to epoch'''
     temp = timestamp_string.split('.')
-    # timestamp_string = temp[0]
-    con = date_prefix+temp[0]
-    timestamp = datetime.strptime(con, '%Y-%m-%d %H:%M:%S')
+    timestamp_string = temp[0]
+    # timestamp_string.rstrip('0')
 
-    epoch = int(calendar.timegm(timestamp.utctimetuple()))
-    epoch = epoch + float('.'+temp[1])
+    con = date_prefix+timestamp_string
+    timestamp = datetime.strptime(con, '%Y-%m-%d %H:%M:%S')
+    epoch = timestamp.timestamp()
+    epoch = epoch  # + float('.' + temp[1])
     return epoch
 
 import ciso8601
@@ -209,6 +210,7 @@ def rewrite_cointick(inFile, outFile):
          'amount': ob.entry_sx}, columns=['date', 'type', 'price', 'amount'])
     #  new_ob.type = [0 if x else 1 for x in new_ob.type]
     nob = new_ob.set_index('price')
+    # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
     cur_dates = new_ot['date'].unique()
     x = 0
     print('going through dates')
@@ -220,30 +222,33 @@ def rewrite_cointick(inFile, outFile):
 
         for cdate in cur_dates:
             temp_ot = new_ot.loc[new_ot.date == cdate]
-            temp_ot = temp_ot.set_index('price')
+            #temp_ot = temp_ot.set_index('price')
             temp_ot_up = update_addsub.loc[new_ot.date == cdate]
-
+            if(temp_ot_up.shape[0]!=temp_ot.shape[0]):
+                raise ValueError("mismatched shape for update")
             for i in range(0, len(temp_ot)):
                 row_to_append = temp_ot.iloc[i]
-                p = temp_ot.index[i]  # this rows price
+                p = row_to_append.price  # this rows price
 
                 if nob.index.contains(p):  # assume buy and ask correctly match
                     urow_to_append = temp_ot_up.iloc[i]
-                    row_to_append['date'] = 0
-                    row_to_append['type'] = 0
-                    if urow_to_append == 'ADD':
-                        nob.loc[p] += row_to_append  # ignores index column
+                    #row_to_append['date'] = 0
+                    #row_to_append['type'] = 0
+                    if urow_to_append[0] == 'A':
+                        nob.loc[p,'amount'] += row_to_append[3]  # ignores index column
                     else:
-                        if urow_to_append == 'SUB':
-                            nob.loc[p] -= row_to_append
+                        if urow_to_append[0] == 'S':
+                            nob.loc[p,'amount'] -= row_to_append[3]
                 else:
-                    nob.loc[p] = row_to_append
+                    nob.loc[p] = row_to_append[[0,1,3]]
             nob['date'] = cdate
             x = x + 1
-            # print('writing nob' + str(x))
+            print('writing nob' + str(x))
             # csv_writer.writerow(nob.reset_index().values.tolist())
-            tnob = nob.reset_index()
-            w.writerows(tnob.values)
+            if cdate%61==0:
+                nob = nob.loc[nob.amount!=0]
+            #nob.to_csv(file, header=False, chunksize=10000)
+            w.writerows(nob.reset_index().values)
 
             # if (x<nArray.shape[0]):
             #     nArray[x:x+tnob.shape[0],0:] = tnob.values
@@ -274,7 +279,7 @@ if __name__ == "__main__":
 
     if runOrderBook:
 
-        for root, dirs, files in os.walk('e:/bitmex/orderbook/'):
+        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/orderbook/11/29'):
 
             for filename in files:
                 filename = os.fsdecode(filename)
