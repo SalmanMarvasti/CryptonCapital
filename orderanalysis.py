@@ -20,8 +20,8 @@ import gzip
 import matplotlib.pyplot as plt
 import csv
 directory = os.fsencode(DOWNLOAD_LOCATION_PATH)
-tempdf = pd.read_csv(DOWNLOAD_LOCATION_PATH+'binance.csv')
-validpairs = tempdf['PairNameApi']
+#tempdf = pd.read_csv(DOWNLOAD_LOCATION_PATH+'binance.csv')
+#validpairs = tempdf['PairNameApi']
 
 
 def bid_ask_spread(df):
@@ -149,6 +149,7 @@ date_prefix = '2018-11-1 '
 def gen_date_prefix(strpath):
     global date_prefix
     if(strpath):
+        strpath=strpath.replace('\\', '/')
         s=strpath.split('/')[-2:]
         date_prefix = '2018-'+s[0]+'-'+s[1]+' '
 
