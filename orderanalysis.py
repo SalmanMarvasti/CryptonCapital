@@ -167,6 +167,7 @@ def gen_date_prefix(strpath):
         s=strpath.split('/')[-2:]
         date_prefix = '2018-'+s[0]+'-'+s[1]+' '
 
+import pytz
 def convert_utc_to_epoch(timestamp_string):
     '''Use this function to convert utc to epoch'''
     temp = timestamp_string.split('.')
@@ -175,8 +176,10 @@ def convert_utc_to_epoch(timestamp_string):
 
     con = date_prefix+timestamp_string
     timestamp = datetime.strptime(con, '%Y-%m-%d %H:%M:%S')
+   
+    timestamp = timestamp.replace(tzinfo=pytz.utc)
     epoch = timestamp.timestamp()
-    epoch = epoch  # + float('.' + temp[1])
+    epoch = epoch  + float('.' + temp[1])
     return epoch
 
 import ciso8601
@@ -208,68 +211,93 @@ def rewrite_cointick_trades(inFile, outFile):
 
 
 
+def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
 
 
-def rewrite_cointick(inFile, outFile):
-    df = pd.read_csv(inFile, delimiter=';')
-    ob = df.loc[df['update_type'] == 'SNAPSHOT']
+    first = True
+    output_path = DOWNLOAD_LOCATION_PATH + 'ob/' + outFile
+    with open(output_path, "w") as file:
+        w = csv.writer(file)
+        w.writerow(['price', 'date', 'type', 'amount'])
+        for df in pd.read_csv(inFile, delimiter=';', chunksize=1000):
+            if first:
+                ob = df.loc[df['update_type'] == 'SNAPSHOT']
+                new_ob = pd.DataFrame({'date': ob.time_exchange.apply(convert_utc_to_epoch), 'type': ob.is_buy, 'price': ob.entry_px, 'amount': ob.entry_sx}, columns=['date', 'type', 'price', 'amount'])
+                first = False
+                nob = new_ob.set_index('price')
+            nob = rewrite_cointick(inFile,outFile,df,nob,w,save_plots)
+    print('finished appending')
+    
+
+
+def rewrite_cointick(inFile, outFile, df, nob, w,save_plots=False):
+    # df = pd.read_csv(inFile, delimiter=';')
+    
 
     ot = df.loc[df['update_type'] != 'SNAPSHOT']
     new_ot = pd.DataFrame(
         {'date': ot.time_exchange.apply(convert_utc_to_epoch), 'type': ot.is_buy, 'price': ot.entry_px,
-         'amount': ot.entry_sx}, columns=['date', 'type', 'price', 'amount'])
+         'amount': ot.entry_sx, 'update_type': ot.update_type}, columns=['date', 'type', 'price', 'amount', 'update_type'])
 
-    new_ob = pd.DataFrame(
-        {'date': ob.time_exchange.apply(convert_utc_to_epoch), 'type': ob.is_buy, 'price': ob.entry_px,
-         'amount': ob.entry_sx}, columns=['date', 'type', 'price', 'amount'])
+
     #  new_ob.type = [0 if x else 1 for x in new_ob.type]
-    nob = new_ob.set_index('price')
+    
     # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
     cur_dates = new_ot['date'].unique()
     text_dates = pd.to_datetime(cur_dates, unit='s')
     x = 0
     print('going through dates')
-    output_path = DOWNLOAD_LOCATION_PATH + 'ob/' + outFile
-    with open(output_path, "w") as file:
-        w = csv.writer(file)
-        w.writerow(['price', 'date', 'type', 'amount'])
-        update_addsub = ot.update_type
+
+    if True:
+
+        # update_addsub = ot.update_type
+        prevdate=0
 
         for cdate in cur_dates:
             temp_ot = new_ot.loc[new_ot.date == cdate]
             #temp_ot = temp_ot.set_index('price')
-            temp_ot_up = update_addsub.loc[new_ot.date == cdate]
-            if(temp_ot_up.shape[0]!=temp_ot.shape[0]):
-                raise ValueError("mismatched shape for update")
+            #temp_ot_up = update_addsub.loc[new_ot.date == cdate]
+            #if(temp_ot_up.shape[0]!=temp_ot.shape[0]):
+            #    raise ValueError("mismatched shape for update")
             for i in range(0, len(temp_ot)):
                 row_to_append = temp_ot.iloc[i]
                 p = row_to_append.price  # this rows price
-
-                if nob.index.contains(p):  # assume buy and ask correctly match
-                    urow_to_append = temp_ot_up.iloc[i]
-                    #row_to_append['date'] = 0
-                    #row_to_append['type'] = 0
+                urow_to_append = row_to_append.update_type
+                if nob.index.contains(p):  # assume buy and ask correctly match   
+                    row_to_append['date'] = 0
+                    row_to_append['type'] = 0
                     if urow_to_append[0] == 'A':
-                        nob.loc[p,'amount'] += row_to_append[3]  # ignores index column
+                        nob.loc[p] += row_to_append[[0,1,3]]  # ignores index column
                     else:
                         if urow_to_append[0] == 'S':
-                            nob.loc[p,'amount'] -= row_to_append[3]
+                            nob.loc[p] -= row_to_append[[0,1,3]]
                 else:
-                    nob.loc[p] = row_to_append[[0,1,3]]
+                    if urow_to_append[0]=='A':
+                        nob.loc[p] = row_to_append[[0,1,3]]
+                    else:
+                        raise ValueError("cannot subtract from nonexistant price"+str(p))
             nob['date'] = cdate
-            x = x + 1
-            print('writing nob' + str(x))
+
+            
             # csv_writer.writerow(nob.reset_index().values.tolist())
-            if cdate%61==0:
+            if cdate%30==0:
                 nob = nob.loc[nob.amount!=0]
             #nob.to_csv(file, header=False, chunksize=10000)
             nob.sort_index(inplace = True)
-            N, bins, patches = plt.hist(nob['price'], len(nob), weights=nob['amount'])
-            plt.title(str(text_dates[x])+' vp'+str(inst_vwap(nob)))
-            colorhistbars(patches,nob['type'])
-            plt.savefig(DOWNLOAD_LOCATION_PATH+'img/hist'+outFile[:-3]+'.png')
-            w.writerows(nob.reset_index().values)
-
+            if save_plots:
+                nobprice = nob.index.values
+                nobamount = nob['amount'].values
+                N, hbins, patches = plt.hist(nobprice, nobprice.size, weights=nobamount)
+                plt.title(str(text_dates[x])+' vp') #+str(inst_vwap(nob))s
+                colorhistbars(patches,nob['type'].values)
+                plt.savefig(DOWNLOAD_LOCATION_PATH+'img/hist'+outFile[:-3]+str(x)+'.png')
+            
+            if (cdate - prevdate)>2:
+                w.writerows(nob.reset_index().values)
+                print('writing nob' + str(x)+' '+str(text_dates[x]))
+                prevdate = cdate
+            x = x + 1
+        return nob
             # if (x<nArray.shape[0]):
             #     nArray[x:x+tnob.shape[0],0:] = tnob.values
             # else:
@@ -277,7 +305,6 @@ def rewrite_cointick(inFile, outFile):
             #     nArray = np.append(nArray, tnob.values)
             # x = x + nob.shape[0]
 
-    print('finished appending')
 
 
 if __name__ == "__main__":
@@ -299,13 +326,13 @@ if __name__ == "__main__":
 
     if runOrderBook:
         # media/oem/79EF-A9BE/
-        for root, dirs, files in os.walk('e:/bitmex/orderbook/11/29'):
+        for root, dirs, files in os.walk('d:/bitmex/orderbook/11/03'):
 
             for filename in files:
                 filename = os.fsdecode(filename)
                 gen_date_prefix(root) # generate the month day for datetime from folder
                 if filename.find(tradepairfile)>-1:
-                    rewrite_cointick(root+'/'+filename, date_prefix+filename[:-3])
+                    rewrite_cointick_chunk(root+'/'+filename, date_prefix+filename[:-3])
 
 
     # df = pd.DataFrame(data = nArray[0:x,:], columns=['date', 'type', 'price', 'amount'])
