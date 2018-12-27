@@ -278,7 +278,7 @@ if __name__ == "__main__":
 
     if runOrderBook:
 
-        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/orderbook/11/29'):
+        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/orderbook/11/28'):
 
             for filename in files:
                 filename = os.fsdecode(filename)
