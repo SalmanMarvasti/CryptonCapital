@@ -13,8 +13,10 @@ access_key = 'AKIAJW3Q6QOU2DLIWVVA'
 secret_key = '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'
 from boto.s3.connection import S3Connection
 DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
-# DOWNLOAD_LOCATION_PATH = "d:/s3-backup/"
-# DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
+
+#DOWNLOAD_LOCATION_PATH = "d:/bitmex_new/"
+
+#DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
 
 import tarfile
 import gzip
@@ -174,10 +176,10 @@ def convert_utc_to_epoch(timestamp_string):
 
     con = date_prefix+timestamp_string
     timestamp = datetime.strptime(con, '%Y-%m-%d %H:%M:%S')
-
+   
     timestamp = timestamp.replace(tzinfo=pytz.utc)
     epoch = timestamp.timestamp()
-    epoch = epoch  + float('.' + temp[1])
+    epoch = epoch + float('.' + temp[1])
     return epoch
 
 import ciso8601
@@ -199,8 +201,6 @@ def rewrite_cointick_trades(inFile, outFile):
     df.loc[:,'time_exchange'] = df['time_exchange'].apply(convert_utc_to_epoch_trades)
     col = df.loc[:,'taker_side'] == 'SELL'
     df.loc[:,'taker_side'] = col.astype(int)
-
-
     with open(outFile, "w") as file:
         w = csv.writer(file)
         w.writerow(['date','price', 'amount', 'sell'])
@@ -208,38 +208,50 @@ def rewrite_cointick_trades(inFile, outFile):
 
 
 
-
+import time
+import gc
 def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
 
 
     first = True
     output_path = DOWNLOAD_LOCATION_PATH + 'ob/' + outFile
+    # gc.disable()
     with open(output_path, "w") as file:
         w = csv.writer(file)
         w.writerow(['price', 'date', 'type', 'amount'])
-        for df in pd.read_csv(inFile, delimiter=';', chunksize=1000):
+        s = time.time()
+        countn = 0
+        for df in pd.read_csv(inFile, delimiter=';', chunksize=400):
             if first:
                 ob = df.loc[df['update_type'] == 'SNAPSHOT']
                 new_ob = pd.DataFrame({'date': ob.time_exchange.apply(convert_utc_to_epoch), 'type': ob.is_buy, 'price': ob.entry_px, 'amount': ob.entry_sx}, columns=['date', 'type', 'price', 'amount'])
                 first = False
                 nob = new_ob.set_index('price')
+                df = df.loc[df['update_type'] != 'SNAPSHOT']
+                nob.sort_index(inplace=True)
             nob = rewrite_cointick(inFile,outFile,df,nob,w,save_plots)
+            countn +=1
+            if(countn%5==0):
+                etime = time.time()
+                print('timed 30 runs' + str(etime-s))
+                s=etime
+
     print('finished appending')
+    
 
 
-
-def rewrite_cointick(inFile, outFile, df, nob, w,save_plots=False):
+def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
     # df = pd.read_csv(inFile, delimiter=';')
+    
 
-
-    ot = df.loc[df['update_type'] != 'SNAPSHOT']
     new_ot = pd.DataFrame(
         {'date': ot.time_exchange.apply(convert_utc_to_epoch), 'type': ot.is_buy, 'price': ot.entry_px,
          'amount': ot.entry_sx, 'update_type': ot.update_type}, columns=['date', 'type', 'price', 'amount', 'update_type'])
+    new_ot.sort_values('date', kind='mergesort', inplace=True)
 
 
     #  new_ob.type = [0 if x else 1 for x in new_ob.type]
-
+    
     # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
     cur_dates = new_ot['date'].unique()
     text_dates = pd.to_datetime(cur_dates, unit='s')
@@ -257,40 +269,91 @@ def rewrite_cointick(inFile, outFile, df, nob, w,save_plots=False):
             #temp_ot_up = update_addsub.loc[new_ot.date == cdate]
             #if(temp_ot_up.shape[0]!=temp_ot.shape[0]):
             #    raise ValueError("mismatched shape for update")
+
+
+
+
+            # temp_ot_add = temp_ot.loc[temp_ot['update_type']=='ADD'].groupby(['price']).sum()
+            # temp_ot_sub = temp_ot.loc[temp_ot['update_type']=='SUB'].groupby(['price']).sum()
+            # m=pd.merge(nob, temp_ot_add, left_index=True,right_index=True, how='outer')
+            # m.fillna(0,inplace=True)
+            # m.loc[:, 'amount'] = m.loc[:, ['amount_x', 'amount_y']].sum(axis=1)
+            # #
+            # #
+            # #
+            # nob = m[['date_x','type_x', 'amount']]
+            # nob.rename(columns={'date_x':'date','type_x':'type'}, inplace=True)
+            # # nob['date'] = cdate
+            # m = pd.merge(nob, temp_ot_sub, left_index=True, right_index=True, how='outer')
+            # m.fillna(0, inplace=True)
+            # m.loc[:, 'amount'] = m.loc[:, 'amount_x'] - m.loc[:, 'amount_y']
+            # nob = m[['date_x','type_x', 'amount']]
+            #
+            # nob.rename(columns={'date_x':'date','type_x':'type'}, inplace=True)
+
+
             for i in range(0, len(temp_ot)):
-                row_to_append = temp_ot.iloc[i]
-                p = row_to_append.price  # this rows price
-                urow_to_append = row_to_append.update_type
-                if nob.index.contains(p):  # assume buy and ask correctly match
-                    row_to_append['date'] = 0
-                    row_to_append['type'] = 0
-                    if urow_to_append[0] == 'A':
-                        nob.loc[p] += row_to_append[[0,1,3]]  # ignores index column
-                    else:
-                        if urow_to_append[0] == 'S':
-                            nob.loc[p] -= row_to_append[[0,1,3]]
-                else:
-                    if urow_to_append[0]=='A':
-                        nob.loc[p] = row_to_append[[0,1,3]]
-                    else:
-                        raise ValueError("cannot subtract from nonexistant price"+str(p))
-            nob['date'] = cdate
+               row_to_append = temp_ot.iloc[i]
+               p = row_to_append.price  # this rows price
+               urow_to_append = row_to_append.update_type
+               if nob.index.contains(p) and nob.loc[p,'amount']!=0:  # assume buy and ask correctly match
+                   #row_to_append['date'] = 0
+                   #row_to_append['type'] = 0
+                   if nob.loc[p,'type']== row_to_append.type:
+                       print('ok')
+                   else:
+                       # if nob.loc[p,'amount']!=0:
+                        print('not_ok'+urow_to_append)
+
+                   if urow_to_append[0] == 'A':
+                        if nob.loc[p, 'type'] != row_to_append.type:
+                           nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                        else:
+                            nob.loc[p,['amount']] += row_to_append[[3]]  # ignores index column
+                   else:
+                        if urow_to_append == 'SUB':
+                            if nob.loc[p, 'type'] != row_to_append.type:
+                               print('warning nothing to subtract setting')
+
+                               nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                            else:
+                                if nob.loc[p, 'amount']==0 or  nob.loc[p,'amount']<row_to_append.amount:
+                                    print('error cant have negative')
+                                nob.loc[p,['amount']] -= row_to_append[[3]]
 
 
+                        else:
+                            print('*****Setting' + urow_to_append)
+                            nob.loc[p, ['type','amount']] = row_to_append[[1, 3]]
+
+               else:
+                   if urow_to_append[0]=='A' or urow_to_append[0]=='SET':
+                       nob.loc[p,:] = row_to_append[[0,1,3]]
+                       nob.sort_index(inplace=True)
+                   else:
+                       raise ValueError("cannot subtract from nonexistant price"+str(p))
+
+
+
+            nob.loc[:,'date'] = cdate
+            
             # csv_writer.writerow(nob.reset_index().values.tolist())
-            if cdate%30==0:
-                nob = nob.loc[nob.amount!=0]
+            #if cdate%30==0:
+            #    nob = nob.loc[nob.amount!=0]
             #nob.to_csv(file, header=False, chunksize=10000)
-            nob.sort_index(inplace = True)
-            if save_plots:
-                nobprice = nob.index.values
-                nobamount = nob['amount'].values
-                N, hbins, patches = plt.hist(nobprice, nobprice.size, weights=nobamount)
-                plt.title(str(text_dates[x])+' vp') #+str(inst_vwap(nob))s
-                colorhistbars(patches,nob['type'].values)
-                plt.savefig(DOWNLOAD_LOCATION_PATH+'img/hist'+outFile[:-3]+str(x)+'.png')
 
-            if (cdate - prevdate)>2:
+
+            
+            if (cdate - prevdate)>1:
+                nob = nob.loc[nob.amount != 0]
+                if save_plots:
+                    nobprice = nob.index.values
+                    nobamount = nob['amount'].values
+                    plt.clf()
+                    N, hbins, patches = plt.hist(nobprice, nobprice.size, weights=nobamount)
+                    plt.title(str(text_dates[x]) + ' vp')  # +str(inst_vwap(nob))s
+                    colorhistbars(patches, nob['type'].values)
+                    plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(x) + '.png')
                 w.writerows(nob.reset_index().values)
                 print('writing nob' + str(x)+' '+str(text_dates[x]))
                 prevdate = cdate
@@ -323,14 +386,14 @@ if __name__ == "__main__":
                     rewrite_cointick_trades(root+'/'+filename, '/media/oem/79EF-A9BE/bitmex/converted_trades/'+date_prefix+filename[:-3])
 
     if runOrderBook:
-
-        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/orderbook/11/29'):
+        # media/oem/79EF-A9BE/
+        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/orderbook/'):
 
             for filename in files:
                 filename = os.fsdecode(filename)
                 gen_date_prefix(root) # generate the month day for datetime from folder
                 if filename.find(tradepairfile)>-1:
-                    rewrite_cointick_chunk(root+'/'+filename, date_prefix+filename[:-3])
+                    rewrite_cointick_chunk(root+'/'+filename, date_prefix+filename[:-3],True)
 
 
     # df = pd.DataFrame(data = nArray[0:x,:], columns=['date', 'type', 'price', 'amount'])
