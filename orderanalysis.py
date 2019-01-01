@@ -226,7 +226,7 @@ def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
                 ob = df.loc[df['update_type'] == 'SNAPSHOT']
                 new_ob = pd.DataFrame({'date': ob.time_exchange.apply(convert_utc_to_epoch), 'type': ob.is_buy, 'price': ob.entry_px, 'amount': ob.entry_sx}, columns=['date', 'type', 'price', 'amount'])
                 first = False
-                nob = new_ob.set_index('price')
+                nob = new_ob.set_index(['price','type'])
                 df = df.loc[df['update_type'] != 'SNAPSHOT']
                 nob.sort_index(inplace=True)
             nob = rewrite_cointick(inFile,outFile,df,nob,w,save_plots)
@@ -239,9 +239,10 @@ def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
     print('finished appending')
     
 
-
+count_hist = 0
 def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
     # df = pd.read_csv(inFile, delimiter=';')
+    global count_hist
     
 
     new_ot = pd.DataFrame(
@@ -294,48 +295,50 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
 
             for i in range(0, len(temp_ot)):
                row_to_append = temp_ot.iloc[i]
-               p = row_to_append.price  # this rows price
+               p = (row_to_append.price, row_to_append.type)  # this rows price
                urow_to_append = row_to_append.update_type
-               if nob.index.contains(p) and nob.loc[p,'amount']!=0:  # assume buy and ask correctly match
+
+               if nob.index.isin([p]).any() and nob.loc[p,'amount']!=0:  # assume buy and ask correctly match
                    #row_to_append['date'] = 0
                    #row_to_append['type'] = 0
-                   if nob.loc[p,'type']== row_to_append.type:
+                   if p[1]== row_to_append.type:
                        print('ok')
                    else:
                        # if nob.loc[p,'amount']!=0:
                         print('not_ok'+urow_to_append)
 
                    if urow_to_append[0] == 'A':
-                        if nob.loc[p, 'type'] != row_to_append.type:
-                           nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                        if p[1] != row_to_append.type:
+                           print('error')
+                           #nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
                         else:
-                            nob.loc[p,['amount']] += row_to_append[[3]]  # ignores index column
+                            nob.loc[p,'amount'] += row_to_append[3] # ignores index column
                    else:
                         if urow_to_append == 'SUB':
-                            if nob.loc[p, 'type'] != row_to_append.type:
-                               print('warning nothing to subtract setting')
-
-                               nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                            if p[1] != row_to_append.type:
+                               print('error nothing to subtract setting')
+                               # nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
                             else:
                                 if nob.loc[p, 'amount']==0 or  nob.loc[p,'amount']<row_to_append.amount:
                                     print('error cant have negative')
-                                nob.loc[p,['amount']] -= row_to_append[[3]]
+                                nob.loc[p,'amount'] -= row_to_append[3]
 
 
                         else:
                             print('*****Setting' + urow_to_append)
-                            nob.loc[p, ['type','amount']] = row_to_append[[1, 3]]
+                            nob.loc[p, :] = row_to_append[[ 0, 3]]
+
 
                else:
                    if urow_to_append[0]=='A' or urow_to_append[0]=='SET':
-                       nob.loc[p,:] = row_to_append[[0,1,3]]
-                       nob.sort_index(inplace=True)
+                       nob.loc[p,:] = row_to_append[[0,3]]
                    else:
                        raise ValueError("cannot subtract from nonexistant price"+str(p))
 
 
 
             nob.loc[:,'date'] = cdate
+            nob.sort_index(inplace=True)
             
             # csv_writer.writerow(nob.reset_index().values.tolist())
             #if cdate%30==0:
@@ -344,17 +347,22 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
 
 
             
-            if (cdate - prevdate)>1:
+            if True: #(cdate - prevdate)>1:
                 nob = nob.loc[nob.amount != 0]
+                rnob = nob.reset_index()
+                if count_hist>2000:
+                    save_plots = False # Temp remove TODO
+
                 if save_plots:
-                    nobprice = nob.index.values
-                    nobamount = nob['amount'].values
+                    nobprice = rnob.price.values
+                    nobamount = rnob['amount'].values
                     plt.clf()
-                    N, hbins, patches = plt.hist(nobprice, nobprice.size, weights=nobamount)
+                    N, hbins, patches = plt.hist(nobprice, len(nobprice), weights=nobamount)
                     plt.title(str(text_dates[x]) + ' vp')  # +str(inst_vwap(nob))s
-                    colorhistbars(patches, nob['type'].values)
-                    plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(x) + '.png')
-                w.writerows(nob.reset_index().values)
+                    colorhistbars(patches, rnob['type'].values)
+                    plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(count_hist) + '.png')
+                    count_hist += 1
+                w.writerows(rnob.values)
                 print('writing nob' + str(x)+' '+str(text_dates[x]))
                 prevdate = cdate
             x = x + 1

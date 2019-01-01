@@ -1,5 +1,5 @@
 
-from bitmex_websocket import BitMEXWebsocket
+from bitmex_websocket_cust import BitMEXWebsocket
 
 import logging
 
@@ -11,9 +11,8 @@ from time import sleep
 
 # Basic use of websocket.
 
-def run():
+def getBitmexWs():
 
-    logger = setup_logger()
 
 
 
@@ -21,29 +20,11 @@ def run():
 
     ws = BitMEXWebsocket(endpoint="wss://www.bitmex.com/", symbol="XBTUSD",
 
-                         api_key=None, api_secret=None)
+                         api_key='aHujwNKFyI3sxd5mKffKSf5O', api_secret='L3cVchQUvGnzJCxc_X8jIxuCj0dEs5IDyMmxYRtbZNkyMOrA')
 
 
 
-    logger.info("Instrument data: %s" % ws.get_instrument())
-
-
-
-    # Run forever
-
-    while(ws.ws.sock.connected):
-
-        logger.info("Ticker: %s" % ws.get_ticker())
-
-        if ws.api_key:
-
-            logger.info("Funds: %s" % ws.funds())
-
-        logger.info("Market Depth: %s" % ws.market_depth())
-
-        logger.info("Recent Trades: %s\n\n" % ws.recent_trades())
-
-        sleep(10)
+    return ws
 
 
 
@@ -51,11 +32,11 @@ def run():
 
 def setup_logger():
 
-    # Prints logger info to terminal
-
+    # Prints logger info to terminalS
     logger = logging.getLogger()
 
     logger.setLevel(logging.INFO)  # Change this to DEBUG if you want a lot more info
+
 
     ch = logging.StreamHandler()
 
@@ -76,5 +57,20 @@ def setup_logger():
 
 
 if __name__ == "__main__":
+    ws = getBitmexWs()
+    logger = setup_logger()
+    logger.info("Instrument data: %s" % ws.get_instrument())
 
-    run()
+    while(ws.ws.sock.connected):
+
+        logger.info("Ticker: %s" % ws.get_ticker())
+
+        #if ws.api_key:
+
+            #logger.info("Funds: %s" % ws.funds())
+
+        logger.info("Market Depth: %s" % ws.market_depth())
+
+        logger.info("Recent Trades: %s\n\n" % ws.recent_trades())
+
+        sleep(2)

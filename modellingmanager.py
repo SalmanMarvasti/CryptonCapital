@@ -12,13 +12,20 @@ from twisted.internet import protocol
 from twisted.internet import reactor
 import os
 import time
+# from bitmex_websocket import getBitmexWs
 from atomicwrites import atomic_write
+from bitmexwebsock import getBitmexWs
 import logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M',
                     filename='./modellingmanager.log',
                     filemode='w')
+
+
+
+ws = getBitmexWs()
+
 
 def create_model(pairname, exchange):
     tp.name = pairname
@@ -151,6 +158,7 @@ class modellingmanager(modelob):
 
     def getlatestob(self,sfile, obfile, pfile):
         with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
+#            sock_ob =  ws.market_depth()
 
             current_time = time.time()
 
@@ -237,9 +245,8 @@ class bitmexmanager(modellingmanager):
         mid = 0
         try:
             with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
-
+                sock_ob = ws.market_depth()
                 current_time = time.time()
-
                 latest_ob= json.loads(url.read().decode())
 
                 print(latest_ob)
@@ -259,7 +266,9 @@ class bitmexmanager(modellingmanager):
                 print(latest_mo)
                 # with open('marketorders.json', 'w') as outfile:
                 #     json.dump(latest_mo, outfile)
-                
+                quoted = ws.get_ticker()
+                if quoted['mid']>mid:
+                    mid = quoted['mid']
                 temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
                 threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
                 filtorders = temporders[threshold]
