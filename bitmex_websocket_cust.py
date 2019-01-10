@@ -82,14 +82,14 @@ class BitMEXWebsocket:
         }
 
         # The instrument has a tickSize. Use it to round values.
-        instrument = self.data['instrument'][0]
-        return {k: round(float(v or 0), instrument['tickSize']) for k, v in ticker.items()}
+        # instrument = self.data['instrument'][0]
+        return ticker
 
     def funds(self):
         '''Get your margin details.'''
         return self.data['margin'][0]
 
-    def market_depth(self):
+    def order_book(self):
         '''Get market depth (orderbook). Returns all levels.'''
         return self.data[ORDERBOOK_KEY]
 

@@ -7,6 +7,8 @@ import logging
 import random
 import queue
 from modellingmanager import create_model, modellingmanager, bitmexmanager
+import numpy as np
+import datetime
 credentials = namedtuple('credentials', ('api', 'secret', 'endpoint'))
 r = redis.StrictRedis(host='localhost',  port=6379, db=0)
 max_retries = 10
@@ -14,7 +16,10 @@ max_retries = 10
 
 
 logging.basicConfig(level=logging.DEBUG,
-                    format='(%(threadName)-9s) %(message)s', )
+                    format='(%(threadName)-9s) %(message)s',
+                    filename='./modellingmanager.log',
+                    filemode='w'
+                    )
 
 BUF_SIZE = 100
 q = queue.Queue(BUF_SIZE)
@@ -116,36 +121,69 @@ class PublishServer:
         i = 0
         while True:
 
-            pfill = 0.7
 
-            tradetype = 'buy'
+            # tradetype = 'buy'
             item = q.get()
             logging.debug('response item'+str(item))
             jl = json.loads(item)
             ts = float(jl['tradesize'])
             tradearray = []
             rd = random.random()
-            if rd>0.5:
-                tradearray.append((0.3+(rd*0.1)) * ts)
-                tradearray.append((0.3 - (rd * 0.1)) * ts)
-                tradearray.append((0.3) * ts)
-            else:
-                tradearray.append(rd * ts)
-                tradearray.append((1-rd) * ts)
 
             tradetype = jl['type']
-
-
+            tradetype = tradetype.lower()
             o = self.readpickleddataframe(jl['pair'])
+            mid = (o.asks[0, 0] + o.bids[0, 0]) * 0.5
+            scale = 0.8
+            askvol = 0
+            bidvol = 0
 
-            ticksaway = [0,-3, -2 , 0]
+            num_bins_used = 4
 
+            for i in range(0,num_bins_used):
+                askvol += o.asks[i, 1] * scale
+                bidvol += o.bids[i, 1] * scale
+            noimpact_vol=1
+            mosize = np.sum(o.marketorders[:,1])/len(o.marketorders)
+            buy_int = -1
+            if tradetype.lower() == 'buy':
+                noimpact_vol = askvol/num_bins_used*0.05
+                buy_int = 1
+            else:
+                noimpact_vol = bidvol/num_bins_used*0.05
+                buy_int = -1
+            if mosize<noimpact_vol:
+                noimpact_vol = mosize
 
-            mydict = {'id': jl['id'], 'no_blocks': len(tradearray), 'ticksize': 0.50, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': o.probordercompletion(int(jl['time_seconds']),tradetype=='buy') }
+            prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
+            marketorderint = 0
+            if prob_order_fill>0.1:
+                marketorderint = int(10*prob_order_fill)
+                if marketorderint>3:
+                    marketorderint = int(marketorderint/2)
 
+            if ts<noimpact_vol:
+                tradearray.append((0.5+(rd*0.1)) * ts)
+                tradearray.append((0.5 - (rd * 0.1)) * ts)
+                #tradearray.append((0.3) * ts)
+
+                ticksaway = [0, buy_int*-2]
+            else:
+                number_trades = int( (ts/noimpact_vol)*num_bins_used)
+
+                if number_trades<2:
+                    number_trades = 2
+                ticksaway = []
+                for j in range(0, int(number_trades/2)):
+                    tradearray.append(rd * ts/number_trades)
+                    tradearray.append((1-rd) * ts/number_trades)
+                    ticksaway.append(buy_int*-1*marketorderint)
+                    ticksaway.append(buy_int * -1*marketorderint)
+
+            mydict = {'id': jl['id'], 'valid_for_sec': o.forcast_estimate_time*4, 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': 0.50, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill }
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)
-            try_command(r.publish,chann, rval)
+            try_command(r.publish, chann, rval)
             time.sleep(0.5)
             i = i + 1
 
@@ -188,12 +226,12 @@ if __name__ == "__main__":
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
     mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-              'exchange': 'Bitmex', 'tradesize': 10, 'time_seconds': 120}
+              'exchange': 'Bitmex', 'tradesize': 10000, 'time_seconds': 120}
 
-    q.put(json.dumps(mydict))
+    #q.put(json.dumps(mydict))
 
-    p = RequestThread(name='request',target='tradesizerequest')
-    c = ResponseThread(name='response',target='tradesizeresponse')
+    p = RequestThread(name='request',target='trade')
+    c = ResponseThread(name='response',target='traderesponse')
 
     c.start()
     time.sleep(2)

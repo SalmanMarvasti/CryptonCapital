@@ -243,9 +243,11 @@ class bitmexmanager(modellingmanager):
 
     def getlatestob(self,sfile, obfile, pfile):
         mid = 0
+        market_order_sell_sum = [1,1] # default one unit bought and sold
+        market_order_buy_sum = [1,1]
         try:
             with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
-                sock_ob = ws.market_depth()
+                alt_orderbook = ws.order_book()
                 current_time = time.time()
                 latest_ob= json.loads(url.read().decode())
 
@@ -267,15 +269,17 @@ class bitmexmanager(modellingmanager):
                 # with open('marketorders.json', 'w') as outfile:
                 #     json.dump(latest_mo, outfile)
                 quoted = ws.get_ticker()
-                if quoted['mid']>mid:
-                    mid = quoted['mid']
+                if np.abs(quoted['mid']-mid)<5:
+                    mid = (quoted['mid'] + mid )*0.5
+                #if quoted['mid']>mid:
+                #    mid = quoted['mid']
                 temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
                 threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
                 filtorders = temporders[threshold]
                 self.marketorders = filtorders
                 print('no of market orders'+str(len(self.marketorders)))
-                buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
-                sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
+                market_order_buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
+                market_order_sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
         except urllib.error.HTTPError as detail:
             logging.info(self.tradingpair + ':' + str(detail))
             if detail.errno in (401,500,404):
@@ -299,8 +303,8 @@ class bitmexmanager(modellingmanager):
             print(e)
         self.df = nfs
 
-        sell_order_per_sec = sell_sum[1] / self.tradewindow_sec
-        buy_order_per_sec = buy_sum[1] / self.tradewindow_sec
+        sell_order_per_sec = market_order_sell_sum[1] / self.tradewindow_sec
+        buy_order_per_sec = market_order_buy_sum[1] / self.tradewindow_sec
 
         prob_blo_live = (sum_bids[1] - sell_order_per_sec) / (sum_bids[1])
         prob_alo_live = (sum_asks[1] - buy_order_per_sec) / (sum_asks[1])
@@ -319,7 +323,7 @@ class bitmexmanager(modellingmanager):
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
-            nn = np.array([[current_time * 1000, prob_blo_live, prob_alo_live, self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1) ]])
+            nn = np.array([[current_time * 1000, mid,quoted['mid'], prob_blo_live, prob_alo_live, self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1) ]])
             np.savetxt(pfile, nn, fmt="%10.4f", delimiter=',')
             pfile.flush()
             sfile.flush()
