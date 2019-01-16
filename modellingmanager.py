@@ -278,15 +278,15 @@ class bitmexmanager(modellingmanager):
                 filtorders = temporders[threshold]
                 self.marketorders = filtorders
                 print('no of market orders'+str(len(self.marketorders)))
-                market_order_buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
-                market_order_sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
+                market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
+                market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
         except urllib.error.HTTPError as detail:
             logging.info(self.tradingpair + ':' + str(detail))
             if detail.errno in (401,500,404):
                 print('exception http')
 
-        sum_bids = self.bids[0:6, :].sum(axis=0)
-        sum_asks = self.asks[0:6, :].sum(axis=0)
+        sum_bids = self.bids[0:5, :].sum(axis=0)
+        sum_asks = self.asks[0:5, :].sum(axis=0)
         if mid>0:
             self.mid = mid
 

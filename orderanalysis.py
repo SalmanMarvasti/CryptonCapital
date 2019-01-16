@@ -48,8 +48,8 @@ def calc_diff(cf, pf, bins):
 
 
 def calculate_bins_ticksize(p):
-     x = np.histogram_bin_edges(p, 'fd')
-     return x
+    x = np.histogram_bin_edges(p, 'fd')
+    return x
 
 
 
@@ -176,7 +176,7 @@ def convert_utc_to_epoch(timestamp_string):
 
     con = date_prefix+timestamp_string
     timestamp = datetime.strptime(con, '%Y-%m-%d %H:%M:%S')
-   
+
     timestamp = timestamp.replace(tzinfo=pytz.utc)
     epoch = timestamp.timestamp()
     epoch = epoch + float('.' + temp[1])
@@ -208,6 +208,20 @@ def rewrite_cointick_trades(inFile, outFile):
 
 
 
+def just_convert_dates(inFile, outFile):
+    first = True
+    output_path = DOWNLOAD_LOCATION_PATH + 'date_orderbook/' + outFile
+    # gc.disable()
+    with open(output_path, "w") as file:
+        # s = time.time()
+        countn = 0
+        for df in pd.read_csv(inFile, delimiter=';', chunksize=800):
+            df['time_exchange'] = df.time_exchange.apply(convert_utc_to_epoch)
+            df.to_csv(file, header=first, index=False)
+            first = False
+
+
+
 import time
 import gc
 def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
@@ -218,7 +232,7 @@ def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
     # gc.disable()
     with open(output_path, "w") as file:
         w = csv.writer(file)
-        w.writerow(['price', 'date', 'type', 'amount'])
+        w.writerow(['price', 'type', 'date', 'amount'])
         s = time.time()
         countn = 0
         for df in pd.read_csv(inFile, delimiter=';', chunksize=400):
@@ -237,13 +251,16 @@ def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
                 s=etime
 
     print('finished appending')
-    
+
 
 count_hist = 0
+prevdate=0
 def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
     # df = pd.read_csv(inFile, delimiter=';')
     global count_hist
-    
+    global prevdate
+
+    # df = df.loc[df['update_type'] != 'SNAPSHOT']
 
     new_ot = pd.DataFrame(
         {'date': ot.time_exchange.apply(convert_utc_to_epoch), 'type': ot.is_buy, 'price': ot.entry_px,
@@ -252,7 +269,7 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
 
 
     #  new_ob.type = [0 if x else 1 for x in new_ob.type]
-    
+
     # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
     cur_dates = new_ot['date'].unique()
     text_dates = pd.to_datetime(cur_dates, unit='s')
@@ -262,7 +279,7 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
     if True:
 
         # update_addsub = ot.update_type
-        prevdate=0
+
 
         for cdate in cur_dates:
             temp_ot = new_ot.loc[new_ot.date == cdate]
@@ -294,85 +311,107 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
 
 
             for i in range(0, len(temp_ot)):
-               row_to_append = temp_ot.iloc[i]
-               p = (row_to_append.price, row_to_append.type)  # this rows price
-               urow_to_append = row_to_append.update_type
+                row_to_append = temp_ot.iloc[i]
+                p = (row_to_append.price, row_to_append.type)  # this rows price
+                urow_to_append = row_to_append.update_type
 
-               if nob.index.isin([p]).any() and nob.loc[p,'amount']!=0:  # assume buy and ask correctly match
-                   #row_to_append['date'] = 0
-                   #row_to_append['type'] = 0
-                   if p[1]== row_to_append.type:
-                       print('ok')
-                   else:
-                       # if nob.loc[p,'amount']!=0:
+                if nob.index.isin([p]).any() and nob.loc[p,'amount']!=0 and urow_to_append[0:3]!='SNA':  # assume buy and ask correctly match
+                    if p[1]!= row_to_append.type:
+                        # if nob.loc[p,'amount']!=0:
                         print('not_ok'+urow_to_append)
 
-                   if urow_to_append[0] == 'A':
+                    if urow_to_append[0] == 'A':
                         if p[1] != row_to_append.type:
-                           print('error')
-                           #nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                            print('error')
+                            #nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
                         else:
                             nob.loc[p,'amount'] += row_to_append[3] # ignores index column
-                   else:
+                    else:
                         if urow_to_append == 'SUB':
                             if p[1] != row_to_append.type:
-                               print('error nothing to subtract setting')
-                               # nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                                raise ValueError('error nothing to subtract setting')
+                                # nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
                             else:
                                 if nob.loc[p, 'amount']==0 or  nob.loc[p,'amount']<row_to_append.amount:
-                                    print('error cant have negative')
+                                    raise ValueError('error cant have negative')
                                 nob.loc[p,'amount'] -= row_to_append[3]
 
 
                         else:
-                            print('*****Setting' + urow_to_append)
+                            print('*****Setting' + urow_to_append +row_to_append.amount)
                             nob.loc[p, :] = row_to_append[[ 0, 3]]
 
 
-               else:
-                   if urow_to_append[0]=='A' or urow_to_append[0]=='SET':
-                       nob.loc[p,:] = row_to_append[[0,3]]
-                   else:
-                       raise ValueError("cannot subtract from nonexistant price"+str(p))
+                else:
+                    if urow_to_append[0]=='A' or urow_to_append=='SET':
+                        nob.loc[p,:] = row_to_append[[0,3]]
+                    else:
+                        if(urow_to_append == 'SNAPSHOT'):
+                            nob = new_ot.loc[new_ot.update_type=='SNAPSHOT'].drop(['update_type'],axis=1)
+                            if(nob.date.unique().shape[0]!=1):
+                                raise ValueError("Snapshot from multiple dates"+str(p)+str(text_dates[x]))
+                            print('Found SNAPSHOT in middle of conversion')
+                            if nob.shape[0]<20:
+                                raise ValueError("Snapshot split"+str(p)+str(text_dates[x]))
+                            start_row = x+nob.shape[0]
+                            snap_found_idx = 0
+                            snap_not_found_idx = 0
+                            for j in range(len(ot)):
+                                if ot.update_type.iloc[j] == 'SNAPSHOT':
+                                    snap_found_idx = j
+                                else:
+                                    if snap_found_idx > 9:
+                                        if ot.update_type.iloc[j] != 'SNAPSHOT':
+                                            snap_not_found_idx = j
+                                            break
+                            if snap_not_found_idx:
+                                start_row = snap_not_found_idx
+                            nob.set_index(['price', 'type'], inplace=True)
+                            nob = nob.loc[nob.amount != 0]
+                            snapshot_removed_ot = ot.iloc[start_row:-1,:]
+                            nob = rewrite_cointick(inFile, outFile, snapshot_removed_ot, nob, w, save_plots)
+                            return nob
+                        if row_to_append.amount !=0:
+                            raise ValueError("cannot subtract from nonexistant price"+str(p)+urow_to_append+' date'+str(text_dates[x]))
 
 
 
-            nob.loc[:,'date'] = cdate
-            nob.sort_index(inplace=True)
-            
-            # csv_writer.writerow(nob.reset_index().values.tolist())
-            #if cdate%30==0:
-            #    nob = nob.loc[nob.amount!=0]
-            #nob.to_csv(file, header=False, chunksize=10000)
+        nob.loc[:,'date'] = cdate
+        nob.sort_index(inplace=True)
+
+        # csv_writer.writerow(nob.reset_index().values.tolist())
+        #if cdate%30==0:
+        #    nob = nob.loc[nob.amount!=0]
+        #nob.to_csv(file, header=False, chunksize=10000)
 
 
-            
-            if True: #(cdate - prevdate)>1:
-                nob = nob.loc[nob.amount != 0]
-                rnob = nob.reset_index()
-                if count_hist>2000:
-                    save_plots = False # Temp remove TODO
 
-                if save_plots:
-                    nobprice = rnob.price.values
-                    nobamount = rnob['amount'].values
-                    plt.clf()
-                    N, hbins, patches = plt.hist(nobprice, len(nobprice), weights=nobamount)
-                    plt.title(str(text_dates[x]) + ' vp')  # +str(inst_vwap(nob))s
-                    colorhistbars(patches, rnob['type'].values)
-                    plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(count_hist) + '.png')
-                    count_hist += 1
-                w.writerows(rnob.values)
-                print('writing nob' + str(x)+' '+str(text_dates[x]))
-                prevdate = cdate
-            x = x + 1
-        return nob
-            # if (x<nArray.shape[0]):
-            #     nArray[x:x+tnob.shape[0],0:] = tnob.values
-            # else:
-            #     print('warning slow append')
-            #     nArray = np.append(nArray, tnob.values)
-            # x = x + nob.shape[0]
+        if (cdate - prevdate)>1:
+            nob = nob.loc[nob.amount != 0]
+            rnob = nob.reset_index()
+            if count_hist>2000:
+                save_plots = False # Temp remove TODO
+
+            if save_plots:
+                nobprice = rnob.price.values
+                nobamount = rnob['amount'].values
+                plt.clf()
+                N, hbins, patches = plt.hist(nobprice, len(nobprice), weights=nobamount)
+                plt.title(str(text_dates[x]) + ' vp')  # +str(inst_vwap(nob))s
+                colorhistbars(patches, rnob['type'].values)
+                plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(count_hist) + '.png')
+                count_hist += 1
+            w.writerows(rnob.values)
+            print('writing nob' + str(x)+' '+str(text_dates[x]))
+            prevdate = cdate
+        x = x + 1
+    return nob
+    # if (x<nArray.shape[0]):
+    #     nArray[x:x+tnob.shape[0],0:] = tnob.values
+    # else:
+    #     print('warning slow append')
+    #     nArray = np.append(nArray, tnob.values)
+    # x = x + nob.shape[0]
 
 
 
@@ -401,7 +440,8 @@ if __name__ == "__main__":
                 filename = os.fsdecode(filename)
                 gen_date_prefix(root) # generate the month day for datetime from folder
                 if filename.find(tradepairfile)>-1:
-                    rewrite_cointick_chunk(root+'/'+filename, date_prefix+filename[:-3],True)
+                    #rewrite_cointick_chunk(root+'/'+filename, date_prefix+filename[:-3],True)
+                    just_convert_dates(root+'/'+filename, 'DATE_CHANGE_'+date_prefix+filename[:-3])
 
 
     # df = pd.DataFrame(data = nArray[0:x,:], columns=['date', 'type', 'price', 'amount'])
