@@ -12,6 +12,7 @@ from twisted.internet import protocol
 from twisted.internet import reactor
 import os
 import time
+import scipy.stats as stats
 # from bitmex_websocket import getBitmexWs
 from atomicwrites import atomic_write
 from bitmexwebsock import getBitmexWs
@@ -93,7 +94,14 @@ class modelob:
         self.SAVEDEBUG = True
         logging.debug('{0} modelling manager started'.format(self.tradingpair))
 
+    def fit_gamma(self):
+        fit_alpha, fit_loc, fit_beta = stats.gamma.fit(data)
+        print(fit_alpha, fit_loc, fit_beta)
+        # (5.0833692504230008, 100.08697963283467, 21.739518937816108)
 
+        print(alpha, loc, beta)
+        # (5, 100.5, 22)
+        return fit_alpha, fit_loc,fit_beta
     def loadfrompickle(self):
         file = open(self.filepath +'df/'+self.tradingpair+'dataframe.pkl', 'rb')
         return pickle.load(file)
@@ -156,9 +164,17 @@ class modellingmanager(modelob):
     #         return n* (1-np.power(np.mean(self.blo_probs), i))
 
 
+    def set_lob_data(current_time, latest_ob ):
+        self.bids = convert_to_ndarray(latest_ob['bids'], current_time)
+        self.bids[:, 3] = np.zeros(len(self.bids))
+        # savebids = self.bids
+        # savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
+
+        self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
+        self.asks[:, 3] = np.ones(len(self.asks))
+
     def getlatestob(self,sfile, obfile, pfile):
         with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
-#            sock_ob =  ws.market_depth()
 
             current_time = time.time()
 
