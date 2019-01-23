@@ -72,7 +72,7 @@ def test2(data):
 
 if __name__ == "__main__":
     #test2('this is a test'.encode('utf-8'))
-    df = pd.read_csv(DOWNLOAD_LOCATION_PATH + 'binance.csv')
+    df = pd.read_csv(DOWNLOAD_LOCATION_PATH + 'tradingpairs.csv')
     validpairs = df[['PairNameApi','ExchangeName']]
     for pair in validpairs.values:
         wargs = ["python", 'modellingmanager.py', pair[0],pair[1]]
