@@ -365,11 +365,12 @@ if __name__ == "__main__":
     exchange = 'Bitmex'
     try:
         args = parser.parse_args()
-        print(args.validpair)
+        #print(args.validpair)
         name = args.validpair
         exchange = args.exchange
         if args.testmode=='yes':
             testmode = True
+        print('tradingpair:' + name+' exchange:'+exchange)
     except Exception as e:
         print("type error: " + str(e))
         name = 'EOSUSDT'
