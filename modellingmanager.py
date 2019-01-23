@@ -22,10 +22,9 @@ logging.basicConfig(level=logging.DEBUG,
                     datefmt='%m-%d %H:%M',
                     filename='./modellingmanager.log',
                     filemode='w')
+from unittest import mock
 
 
-
-ws = getBitmexWs()
 
 
 def create_model(pairname, exchange):
@@ -75,7 +74,7 @@ class modelob:
 
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
-            self.tradeeurl = "https://api.binance.com/api/v1/trades?symbol=/{0}"
+            self.tradeeurl = "https://api.binance.com/api/v1/trades?symbol={0}"
         if self.market in ('BitMex', 'Bitmex'):
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
@@ -351,12 +350,17 @@ class bitmexmanager(modellingmanager):
 
 
 if __name__ == "__main__":
-
+    testmode = False
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument("validpair", nargs='?')
     parser.add_argument("exchange", nargs='?')
+    parser.add_argument("testmode", nargs='?')
+    if not testmode:
+        ws = getBitmexWs()
+    with mock.patch('bitmexwebsock.BitMEXWebsocket') as MockBitmexgetWs:
+        ws = MockBitmexgetWs()
     name = 't'
     exchange = 'Bitmex'
     try:
@@ -364,6 +368,8 @@ if __name__ == "__main__":
         print(args.validpair)
         name = args.validpair
         exchange = args.exchange
+        if args.testmode=='yes':
+            testmode = True
     except Exception as e:
         print("type error: " + str(e))
         name = 'EOSUSDT'
