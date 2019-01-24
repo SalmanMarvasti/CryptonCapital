@@ -38,6 +38,12 @@ def convert_df_bins(d2, bins):
     # d2['bins'] =
     return d2.groupby(pd.cut(d2['price'], bins)).sum()
 
+def diff_df_on_price(tdf1, tdf2):
+    # index should be reset if necessary
+    res = tdf1.merge(tdf2, on='price', how='outer', indicator=True)
+    res = fillna(value={'amount_y': 0, 'amount_x': 0})
+    tdf1['change'] =  res['amount_y'] - res['amount_x']
+    return tdf1
 
 
 def convert_to_ndarray(k, ctime, isAsk=0):
@@ -292,13 +298,21 @@ class bitmexmanager(modellingmanager):
                 threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
                 filtorders = temporders[threshold]
                 self.marketorders = filtorders
-                print('no of market orders'+str(len(self.marketorders)))
+                logging.info('no of market orders'+str(len(self.marketorders)))
                 market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
                 market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
         except urllib.error.HTTPError as detail:
-            logging.info(self.tradingpair + ':' + str(detail))
+            logging.exception(self.tradingpair + ':' + str(detail))
             if detail.errno in (401,500,404):
                 print('exception http')
+            return
+        except ValueError as ver:
+            logging.exception("ValueError"+str(ver))
+            return
+        except Exception as eer:
+            logging.exception("unexpected Error")
+            logging.warning('Error, may not recover from this')
+            return
 
         sum_bids = self.bids[0:5, :].sum(axis=0)
         sum_asks = self.asks[0:5, :].sum(axis=0)
@@ -350,7 +364,7 @@ class bitmexmanager(modellingmanager):
 
 
 if __name__ == "__main__":
-    testmode = False
+    testmode = True
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -370,7 +384,7 @@ if __name__ == "__main__":
         exchange = args.exchange
         if args.testmode=='yes':
             testmode = True
-        print('tradingpair:' + name+' exchange:'+exchange)
+        print('tradingpair:' + str(name)+' exchange:'+str(exchange))
     except Exception as e:
         print("type error: " + str(e))
         name = 'EOSUSDT'
