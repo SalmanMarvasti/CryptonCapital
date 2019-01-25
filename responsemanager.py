@@ -17,7 +17,7 @@ max_retries = 10
 
 logging.basicConfig(level=logging.DEBUG,
                     format='(%(threadName)-9s) %(message)s',
-                    filename='./modellingmanager.log',
+                    filename='./responsemanager.log',
                     filemode='w'
                     )
 
@@ -146,14 +146,17 @@ class PublishServer:
             noimpact_vol=1
             mosize = np.sum(o.marketorders[:,1])/len(o.marketorders)
             buy_int = -1
+            first_queue_length = bidvol
             if tradetype.lower() == 'buy':
-                noimpact_vol = askvol/num_bins_used*0.05
+                first_queue_length = o.vol_at_lob(1, 1)
+                noimpact_vol = askvol/num_bins_used*0.009
                 buy_int = 1
             else:
-                noimpact_vol = bidvol/num_bins_used*0.05
+                first_queue_length = o.vol_at_lob(1, 1)
+                noimpact_vol = bidvol/num_bins_used*0.009
                 buy_int = -1
             if mosize<noimpact_vol:
-                noimpact_vol = mosize
+                noimpact_vol = mosize*0.95
 
             prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
             marketorderint = 0
@@ -166,8 +169,14 @@ class PublishServer:
                 tradearray.append((0.5+(rd*0.1)) * ts)
                 tradearray.append((0.5 - (rd * 0.1)) * ts)
                 #tradearray.append((0.3) * ts)
+                if mosize>first_queue_length/10:
+                    tickd = -1*(first_queue_length/mosize)/10*num_bins_used
+                    if tickd > -1:
+                        tickd = -1
+                if mosize * 0.5 > noimpact_vol:
+                    tickd = -1
 
-                ticksaway = [0, buy_int*-2]
+                ticksaway = [0, buy_int*tickd]
             else:
                 number_trades = int( (ts/noimpact_vol)*num_bins_used)
 
@@ -184,6 +193,7 @@ class PublishServer:
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)
             try_command(r.publish, chann, rval)
+            print('done publish')
             time.sleep(0.5)
             i = i + 1
 
@@ -218,7 +228,7 @@ if __name__ == "__main__":
     pfill = 0.7
     tradearray = [5]
     tradetype = 'buy'
-    # mydict = {'id': random.randint(1,1000), 'pair':'EOSUSDT','no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2, -3],
+    #mydict = {'id': random.randint(1,1000), 'pair':'EOSUSDT','no_blocks': 3, 'trade_size': tradearray, 'type': tradetype, 'price': [-1, -2, -3],
     #           'prob_fill': pfill, 'ticksize':0.01}
     #
     # q.put(json.dumps(mydict))
@@ -226,7 +236,7 @@ if __name__ == "__main__":
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
     mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-              'exchange': 'Bitmex', 'tradesize': 10000, 'time_seconds': 120}
+              'exchange': 'Bitmex', 'tradesize': 100, 'time_seconds': 120}
 
     #q.put(json.dumps(mydict))
 

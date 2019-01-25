@@ -17,11 +17,6 @@ import scipy.stats as stats
 from atomicwrites import atomic_write
 from bitmexwebsock import getBitmexWs
 import logging
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-                    datefmt='%m-%d %H:%M',
-                    filename='./modellingmanager.log',
-                    filemode='w')
 from unittest import mock
 
 
@@ -97,7 +92,22 @@ class modelob:
         self.filepath = './'
         self.forcast_estimate_time = 15
         self.SAVEDEBUG = True
-        logging.debug('{0} modelling manager started'.format(self.tradingpair))
+        logging.debug('{0} modelling manager initialised'.format(self.tradingpair))
+
+    def vol_at_lob(self, num_bins_used, is_buy):
+        num_bins_used = 4
+        askvol = 0
+        bidvol = 0
+
+        for i in range(0, num_bins_used):
+            askvol += self.asks[i, 1]
+            bidvol += self.bids[i, 1]
+
+        if is_buy:
+            return bidvol
+        else:
+            return askvol
+
 
     def fit_gamma(self):
         fit_alpha, fit_loc, fit_beta = stats.gamma.fit(data)
@@ -313,6 +323,9 @@ class bitmexmanager(modellingmanager):
             logging.exception("unexpected Error")
             logging.warning('Error, may not recover from this')
             return
+        except:
+            logging.exception("Unhandled Exception")
+            raise
 
         sum_bids = self.bids[0:5, :].sum(axis=0)
         sum_asks = self.asks[0:5, :].sum(axis=0)
@@ -367,15 +380,18 @@ if __name__ == "__main__":
     testmode = True
     import argparse
 
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                        datefmt='%m-%d %H:%M',
+                        filename='./modellingmanager.log',
+                        filemode='w')
+
     parser = argparse.ArgumentParser()
     parser.add_argument("validpair", nargs='?')
     parser.add_argument("exchange", nargs='?')
     parser.add_argument("testmode", nargs='?')
-    if not testmode:
-        ws = getBitmexWs()
-    with mock.patch('bitmexwebsock.BitMEXWebsocket') as MockBitmexgetWs:
-        ws = MockBitmexgetWs()
     name = 't'
+
     exchange = 'Bitmex'
     try:
         args = parser.parse_args()
@@ -384,11 +400,20 @@ if __name__ == "__main__":
         exchange = args.exchange
         if args.testmode=='yes':
             testmode = True
-        print('tradingpair:' + str(name)+' exchange:'+str(exchange))
+        if args.testmode == 'no' or args.testmode=='false':
+            testmode = False
+        if name is not None:
+            print('tradingpair:' + str(name)+' exchange:'+str(exchange))
     except Exception as e:
         print("type error: " + str(e))
         name = 'EOSUSDT'
     # tp.secret = "Test@123"
+    if not testmode:
+        ws = getBitmexWs()
+    with mock.patch('bitmexwebsock.BitMEXWebsocket') as MockBitmexgetWs:
+        ws = MockBitmexgetWs()
+
+
     if exchange is None:
         print('setting default exchange Bitmex')
         exchange = 'Bitmex'
