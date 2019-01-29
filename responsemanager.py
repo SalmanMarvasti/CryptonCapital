@@ -109,7 +109,8 @@ class PublishServer:
         self.secret = acct.secret
         self.endpoint = acct.endpoint
         self.redis = connredis('redis.pinksphere.com')
-        r = self.redis
+        self.mosize = 0
+        #r = self.redis
 
     def readpickleddataframe(self, tpair, exch='Binance'):
         return create_model(tpair, exch) # currently loads from file
@@ -139,6 +140,7 @@ class PublishServer:
             bidvol = 0
             tickd = 0
 
+
             num_bins_used = 4
 
             for i in range(0,num_bins_used):
@@ -146,6 +148,8 @@ class PublishServer:
                 bidvol += o.bids[i, 1] * scale
             noimpact_vol=1
             mosize = np.sum(o.marketorders[:,1])/len(o.marketorders)
+            self.mosize=mosize*0.7+self.mosize*0.3
+            mosize = self.mosize
             buy_int = -1
             first_queue_length = bidvol
             if tradetype.lower() == 'buy':
@@ -176,7 +180,6 @@ class PublishServer:
                         tickd = -1
                 if mosize * 0.5 > noimpact_vol:
                     tickd = -1
-
                 ticksaway = [0, buy_int*tickd]
             else:
                 number_trades = int( (ts/noimpact_vol)*num_bins_used)
@@ -239,7 +242,7 @@ if __name__ == "__main__":
     mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
               'exchange': 'Bitmex', 'tradesize': 100, 'time_seconds': 120}
 
-    #q.put(json.dumps(mydict))
+    q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')
