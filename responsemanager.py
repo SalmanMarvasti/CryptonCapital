@@ -137,6 +137,7 @@ class PublishServer:
             scale = 0.8
             askvol = 0
             bidvol = 0
+            tickd = 0
 
             num_bins_used = 4
 
