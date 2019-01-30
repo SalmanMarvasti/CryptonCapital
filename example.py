@@ -164,8 +164,8 @@ if __name__ == "__main__":
     for i in range(1, 10):
         mydict['id'] = random.random()
         q.put(json.dumps(mydict))
-    p = RequestThread(name='request', target='tradesizeresponse')
-    # c = ResponseThread(name='response')
+    p = RequestThread(name='request', target='trade')
+    c = ReadRequestResponseThread(name='response', target='traderesponse' )
 
     p.start()
     time.sleep(7)

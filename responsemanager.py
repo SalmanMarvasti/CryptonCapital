@@ -110,7 +110,7 @@ class PublishServer:
         self.endpoint = acct.endpoint
         self.redis = connredis('redis.pinksphere.com')
         self.mosize = 0
-        #r = self.redis
+        r = self.redis
 
     def readpickleddataframe(self, tpair, exch='Binance'):
         return create_model(tpair, exch) # currently loads from file
