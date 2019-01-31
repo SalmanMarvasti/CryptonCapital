@@ -182,16 +182,18 @@ class PublishServer:
                     tickd = -1
                 ticksaway = [0, buy_int*tickd]
             else:
-                number_trades = int( (ts/noimpact_vol)*num_bins_used)
+                number_trades = int((ts/noimpact_vol)*num_bins_used)
 
                 if number_trades<2:
                     number_trades = 2
                 ticksaway = []
-                for j in range(0, int(number_trades/2)):
+                for j in range(0, int(number_trades)):
                     tradearray.append(rd * ts/number_trades)
                     tradearray.append((1-rd) * ts/number_trades)
                     ticksaway.append(buy_int*-1*marketorderint)
                     ticksaway.append(buy_int * -1*marketorderint)
+                    rd = 0.5+random.random()/4
+
 
             mydict = {'id': jl['id'], 'valid_for_sec': o.forcast_estimate_time*4, 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': 0.50, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill }
             print('publishing'+str(mydict))
@@ -240,7 +242,7 @@ if __name__ == "__main__":
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
     mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-              'exchange': 'Bitmex', 'tradesize': 100, 'time_seconds': 120}
+              'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
 
     q.put(json.dumps(mydict))
 

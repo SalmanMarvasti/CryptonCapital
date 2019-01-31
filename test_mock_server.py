@@ -13,6 +13,13 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         # Process an HTTP GET request and return a response with an HTTP 200 status.
         self.send_response(requests.codes.ok, "thanks for contacting us")
         self.end_headers()
+
+        response = BytesIO()
+        response.write(b'This is POST request. ')
+        response.write(b'Received: ')
+        response.write(body)
+        self.wfile.write(response.getvalue())
+
         return
 
 
@@ -21,6 +28,7 @@ def get_free_port():
     s.bind(('localhost', 0))
     address, port = s.getsockname()
     s.close()
+    print('using port: '+str(port))
     return port
 
 
@@ -49,10 +57,12 @@ class TestMockServer(object):
 
 
 
-
+import time
 
 if __name__ == "__main__":
 
     t=TestMockServer()
     t.setup_class()
     t.test_request_response()
+    while True:
+        time.sleep(1)
