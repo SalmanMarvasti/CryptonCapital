@@ -241,10 +241,10 @@ if __name__ == "__main__":
     # for i in range(1, 10):
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
-    mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-              'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
+    #mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
+     #         'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
 
-    q.put(json.dumps(mydict))
+    #q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')
