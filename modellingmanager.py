@@ -76,7 +76,7 @@ class modelob:
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
             self.tradeeurl = "https://api.binance.com/api/v1/trades?symbol={0}"
-        if self.market in ('BitMex', 'Bitmex'):
+        if self.market in ('BitMex', 'Bitmex'): #'http://localhost:{port}/users'.format(port=38803)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
             self.tradewindow_sec = 35 # bitmex trade window must be lower as buyer or seller is not specified
@@ -92,6 +92,8 @@ class modelob:
         self.filepath = './'
         self.forcast_estimate_time = 15
         self.SAVEDEBUG = True
+        self.buy_sum=deque([5.5,5], maxlen=4)
+        self.sell_sum=deque([5.5,5], maxlen=4)
         logging.debug('{0} modelling manager initialised'.format(self.tradingpair))
 
     def vol_at_lob(self, num_bins_used, is_buy):
@@ -161,7 +163,7 @@ class modellingmanager(modelob):
 
     def probordercompletion(self, timeframe, isask): # approximation based on linear
         n = timeframe
-        if len(self.alo_probs)==0 or len(self.blo_probs)==0:
+        if (isask and len(self.alo_probs)==0) or (len(self.blo_probs)==0 and not isask):
             return 0
         if isask:
             return (1-np.power(np.mean(self.alo_probs),n))  # here
@@ -221,6 +223,10 @@ class modellingmanager(modelob):
             print('no of market orders'+str(len(self.marketorders)))
             buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
             sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
+            self.buy_sum.append(buy_sum)
+            self.sell_sum.append(sell_sum)
+            buy_sum = np.mean(self.buy_sum)
+            sell_sum = np.mean(self.sell_sum)
         sum_bids = self.bids.sum(axis=0)
         sum_asks = self.asks.sum(axis=0)
         self.mid = (self.asks[0,0] + self.bids[0,0])*0.5
