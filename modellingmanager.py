@@ -92,8 +92,8 @@ class modelob:
         self.filepath = './'
         self.forcast_estimate_time = 15
         self.SAVEDEBUG = True
-        self.buy_sum=deque([5.5,5], maxlen=4)
-        self.sell_sum=deque([5.5,5], maxlen=4)
+        self.buy_sum=deque([0.0,1], maxlen=4)
+        self.sell_sum=deque([0.0,1], maxlen=4)
         logging.debug('{0} modelling manager initialised'.format(self.tradingpair))
 
     def vol_at_lob(self, num_bins_used, is_buy):

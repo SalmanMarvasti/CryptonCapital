@@ -26,7 +26,11 @@ class BitMEXWebsocket:
 
     def __init__(self, endpoint, symbol, api_key=None, api_secret=None):
         '''Connect to the websocket and initialize data stores.'''
-        self.logger = logging.getLogger(__name__)
+        self.logger =  logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                        datefmt='%m-%d %H:%M',
+                        filename='./bitmexWScust.log',
+                        filemode='w')
         self.logger.debug("Initializing CUSTOM WebSocket.")
         print('CUSTOM BITMEX')
 
@@ -118,7 +122,7 @@ class BitMEXWebsocket:
                                          on_error=self.__on_error,
                                          header=self.__get_auth())
 
-        self.wst = threading.Thread(target=lambda: self.ws.run_forever())
+        self.wst = reactor.callInThread(target=lambda: self.ws.run_forever())
         self.wst.daemon = True
         self.wst.start()
         self.logger.debug("Started thread")
@@ -126,7 +130,7 @@ class BitMEXWebsocket:
         # Wait for connect before continuing
         conn_timeout = 5
         while not self.ws.sock or not self.ws.sock.connected and conn_timeout:
-            sleep(1)
+            sleep(2)
             conn_timeout -= 1
         if not conn_timeout:
             self.logger.error("Couldn't connect to WS! Exiting.")
