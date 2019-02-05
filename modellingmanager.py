@@ -83,8 +83,8 @@ class modelob:
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([0.1], maxlen=6)
-        self.alo_probs = deque([0.1], maxlen=6)
+        self.blo_probs = deque([0.1], maxlen=10)
+        self.alo_probs = deque([0.1], maxlen=10)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -163,7 +163,7 @@ class modellingmanager(modelob):
         if isask:
             n_prod = 1
             for n in self.alo_probs:
-                n_prod = self.alo_probs[-1]*n_prod
+                n_prod = np.min(self.alo_probs)*n_prod
                 n
             if timeframe>len(self.alo_probs):
                 n_prod = np.power(n_prod,timeframe/len(self.alo_probs))
@@ -171,7 +171,7 @@ class modellingmanager(modelob):
         else:
             n_prod = 1
             for n in self.blo_probs:
-                n_prod = self.blo_probs[-1] * n_prod
+                n_prod = np.min(self.blo_probs) * n_prod
             if timeframe > len(self.blo_probs):
                 n_prod = np.power(n_prod, timeframe / len(self.blo_probs))
             return 1 - n_prod
@@ -452,9 +452,9 @@ if __name__ == "__main__":
     else:
         cr = modellingmanager(tp)
     prefix = './csv/'
-    fp = open(prefix+str(tp.name)+'prob2.csv', 'ab')
-    f = open(prefix+str(tp.name)+'marketorders2.csv', 'ab')
-    fob = open(prefix+str(tp.name)+'orderbooks2.csv', 'ab')
+    fp = open(prefix+str(tp.name)+'prob4.csv', 'ab')
+    f = open(prefix+str(tp.name)+'marketorders4.csv', 'ab')
+    fob = open(prefix+str(tp.name)+'orderbooks4.csv', 'ab')
     l = task.LoopingCall(cr.getlatestob,f,fob,fp)
     l.start(cr.tradewindow_sec-5)  # call every tradewindow_sec seconds
 

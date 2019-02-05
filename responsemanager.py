@@ -167,7 +167,7 @@ class PublishServer:
             prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
             alt_prob_order_fill =  o.probordercompletion2(int(jl['time_seconds']),tradetype=='buy')
             marketorderint = 0
-            if prob_order_fill>0.1:
+            if prob_order_fill>0.1 or alt_prob_order_fill>0.15:
                 marketorderint = int(10*prob_order_fill)
                 if marketorderint>3:
                     marketorderint = int(marketorderint/2)
@@ -192,6 +192,8 @@ class PublishServer:
                 for j in range(0, int(number_trades)):
                     tradearray.append(rd * ts/number_trades)
                     tradearray.append((1-rd) * ts/number_trades)
+                    if j>number_trades*(alt_prob_order_fill+(0.1*(0.5-float(jl['targetcost_percent'])))):
+                        marketorderint=0
                     ticksaway.append(buy_int*-1*marketorderint)
                     ticksaway.append(buy_int * -1*marketorderint)
                     rd = 0.5+random.random()/4
@@ -243,10 +245,10 @@ if __name__ == "__main__":
     # for i in range(1, 10):
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
-    # mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-    #          'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
+    mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
+              'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
 
-    #       q.put(json.dumps(mydict))
+    q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')
