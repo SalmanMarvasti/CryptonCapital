@@ -83,8 +83,8 @@ class modelob:
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([0.1], maxlen=5)
-        self.alo_probs = deque([0.1], maxlen=5)
+        self.blo_probs = deque([0.1], maxlen=6)
+        self.alo_probs = deque([0.1], maxlen=6)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -163,14 +163,15 @@ class modellingmanager(modelob):
         if isask:
             n_prod = 1
             for n in self.alo_probs:
-                n_prod = n*n_prod
+                n_prod = self.alo_probs[-1]*n_prod
+                n
             if timeframe>len(self.alo_probs):
                 n_prod = np.power(n_prod,timeframe/len(self.alo_probs))
             return 1-n_prod
         else:
             n_prod = 1
             for n in self.blo_probs:
-                n_prod = n * n_prod
+                n_prod = self.blo_probs[-1] * n_prod
             if timeframe > len(self.blo_probs):
                 n_prod = np.power(n_prod, timeframe / len(self.blo_probs))
             return 1 - n_prod
