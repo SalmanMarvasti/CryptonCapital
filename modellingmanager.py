@@ -79,7 +79,7 @@ class modelob:
         if self.market in ('BitMex', 'Bitmex'): #'http://localhost:{port}/users'.format(port=38803)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
-            self.tradewindow_sec = 35 # bitmex trade window must be lower as buyer or seller is not specified
+            self.tradewindow_sec = 25 # bitmex trade window must be lower as buyer or seller is not specified
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
@@ -90,7 +90,9 @@ class modelob:
         self.vwap = -1.0
         self.df = pd.DataFrame()
         self.filepath = './'
-        self.forcast_estimate_time = 15
+        # static const variables
+        self.forcast_estimate_time = 90
+        self.probfmt = '%2.9f'
         self.SAVEDEBUG = True
         self.buy_sum=deque([0.0,1], maxlen=4)
         self.sell_sum=deque([0.0,1], maxlen=4)
@@ -127,18 +129,6 @@ class modelob:
         with atomic_write(self.filepath +'df/'+self.tradingpair+'dataframe.pkl', mode='wb', overwrite=True) as output:
             output.write(pickle.dumps(self, pickle.HIGHEST_PROTOCOL))
 
-    # def __getstate__(self):
-    #     state = {
-    #         'tradingpair':self.tradingpair,
-    #         'blo_probs':self.blo_probs,
-    #         'alo_probs':self.alo_probs,
-    #         'tick':self.tick,
-    #     }
-    #     print('__getstate__ -> {!r}'.format(state))
-    #     return state
-    #
-    # def __setstate__(self, state):
-    #     self._setVar(state)
 
     def _setVar(self, var):
         for key, value in var.items():
@@ -147,6 +137,12 @@ class modelob:
 class modellingmanager(modelob):
     def __init__(self, acct):
         modelob.__init__(self, acct)
+
+    def get_fmt_list(self, timefmt, probfmt, N):
+        nnfmt = [timefmt, timefmt]
+        for ix in range(2, N):
+            nnfmt.append(probfmt)
+        return nnfmt
 
     def choosetick(self, x: float, y : float):
 
@@ -160,6 +156,24 @@ class modellingmanager(modelob):
         print('doane_tick' + str(x) + ' sprd' + str(baspread) + ' fdtick' + str(y))
         return best
 
+    def probordercompletion2(self, timeframe, isask): # approximation based on linear
+        n = timeframe
+        if (isask and len(self.alo_probs)==0) or (len(self.blo_probs)==0 and not isask):
+            return 0
+        if isask:
+            n_prod = 1
+            for n in self.alo_probs:
+                n_prod = n*n_prod
+            if timeframe>len(self.alo_probs):
+                n_prod = np.power(n_prod,timeframe/len(self.alo_probs))
+            return 1-n_prod
+        else:
+            n_prod = 1
+            for n in self.blo_probs:
+                n_prod = n * n_prod
+            if timeframe > len(self.blo_probs):
+                n_prod = np.power(n_prod, timeframe / len(self.blo_probs))
+            return 1 - n_prod
 
     def probordercompletion(self, timeframe, isask): # approximation based on linear
         n = timeframe
@@ -259,10 +273,13 @@ class modellingmanager(modelob):
         mfmt = [floatfmt, floatfmt, timefmt, intfmt]
         if self.SAVEDEBUG:
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
-            np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
+            np.savetxt(obfile, self.bids, fmt=mfmt, delimitebgr=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
-            nn = np.array([[current_time * 1000, prob_blo_live, prob_alo_live]])
-            np.savetxt(pfile, nn, fmt="%10.4f", delimiter=',')
+            nn = np.array([[current_time * 1000, mid, quoted['mid'], prob_blo_live, prob_alo_live,
+                            self.probordercompletion(self.forcast_estimate_time, 0),
+                            self.probordercompletion(self.forcast_estimate_time, 1)]])
+            nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
+            np.savetxt(pfile, nn, fmt=nnfmt, delimiter=',')
             pfile.flush()
             sfile.flush()
         self.blo_probs.append(prob_blo_live)
@@ -360,7 +377,6 @@ class bitmexmanager(modellingmanager):
             prob_alo_live = (1 + np.mean(self.alo_probs)) * 0.5
         if prob_blo_live<0:
             prob_blo_live = (1 + np.mean(self.blo_probs)) * 0.5
-
         floatfmt = '%30.9f'
         timefmt = '%30.3f'
         intfmt = '%i'
@@ -371,8 +387,9 @@ class bitmexmanager(modellingmanager):
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
-            nn = np.array([[current_time * 1000, mid,quoted['mid'], prob_blo_live, prob_alo_live, self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1) ]])
-            np.savetxt(pfile, nn, fmt="%10.4f", delimiter=',')
+            nn = np.array([[current_time * 1000, mid,quoted['mid'], prob_blo_live, prob_alo_live, self.probordercompletion2(self.forcast_estimate_time ,0), self.probordercompletion2(self.forcast_estimate_time ,1) ,self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1) ]])
+            nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
+            np.savetxt(pfile, nn, nnfmt, delimiter=',')
             pfile.flush()
             sfile.flush()
         self.saveobjecttofile()
@@ -438,7 +455,7 @@ if __name__ == "__main__":
     f = open(prefix+str(tp.name)+'marketorders2.csv', 'ab')
     fob = open(prefix+str(tp.name)+'orderbooks2.csv', 'ab')
     l = task.LoopingCall(cr.getlatestob,f,fob,fp)
-    l.start(cr.tradewindow_sec-10)  # call every tradewindow_sec seconds
+    l.start(cr.tradewindow_sec-5)  # call every tradewindow_sec seconds
 
     # l.stop() will stop the looping calls
     reactor.run()

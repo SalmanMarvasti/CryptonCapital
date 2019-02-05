@@ -93,7 +93,8 @@ def try_command(f, *args, **kwargs):
 
 
 def connredis(h):
-    r = redis.StrictRedis(host=h, password='Test@123', port=6379, db=0)
+    r = redis.StrictRedis(host='ab722e68624e211e9b8160e2a8d9724d-949947629.us-east-1.elb.amazonaws.com',password='Test@123', port=6379, db=0)
+    # redis.StrictRedis(host=h, password='Test@123', port=6379, db=0)
     return r
 
 class PublishServer:
@@ -164,6 +165,7 @@ class PublishServer:
                 noimpact_vol = mosize*0.95
 
             prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
+            alt_prob_order_fill =  o.probordercompletion2(int(jl['time_seconds']),tradetype=='buy')
             marketorderint = 0
             if prob_order_fill>0.1:
                 marketorderint = int(10*prob_order_fill)
@@ -195,7 +197,7 @@ class PublishServer:
                     rd = 0.5+random.random()/4
 
 
-            mydict = {'id': jl['id'], 'valid_for_sec': o.forcast_estimate_time*4, 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': 0.50, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill }
+            mydict = {'id': jl['id'], 'valid_for_sec': o.forcast_estimate_time*4, 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': 0.50, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)
             try_command(r.publish, chann, rval)
@@ -241,10 +243,10 @@ if __name__ == "__main__":
     # for i in range(1, 10):
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
-    #mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-     #         'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
+    # mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
+    #          'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
 
-    #q.put(json.dumps(mydict))
+    #       q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')
