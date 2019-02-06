@@ -223,7 +223,7 @@ class PublishServer:
 
 
             mydict = {'id': jl['id'], 'valid_for_sec': o.tradewindow_sec*3 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
-            print('publishing'+str(mydict))
+            logging.info('publishing'+str(mydict))
             rval = json.dumps(mydict)
             try_command(r.publish, chann, rval)
             print('done publish')
