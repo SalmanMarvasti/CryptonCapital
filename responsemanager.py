@@ -131,6 +131,11 @@ class PublishServer:
             ts = float(jl['tradesize'])
             tradearray = []
             rd = random.random()
+            exchange = jl['exchange']
+            if exchange.lower()=='binance':
+                allowed_fraction = 0.1
+            else:
+                allowed_fraction = 0.01
 
             tradetype = jl['type']
             tradetype = tradetype.lower()
@@ -149,28 +154,33 @@ class PublishServer:
                 bidvol += o.bids[i, 1] * scale
             noimpact_vol=1
             mosize = np.sum(o.marketorders[:,1])/len(o.marketorders)
-            self.mosize=mosize*0.7+self.mosize*0.3
+            self.mosize=mosize*0.6+self.mosize*0.4
             mosize = self.mosize
             buy_int = -1
             first_queue_length = bidvol
             if tradetype.lower() == 'buy':
                 first_queue_length = o.vol_at_lob(1, 1)
-                noimpact_vol = askvol/num_bins_used*0.009
+                noimpact_vol = askvol/num_bins_used*allowed_fraction
                 buy_int = 1
             else:
-                first_queue_length = o.vol_at_lob(1, 1)
-                noimpact_vol = bidvol/num_bins_used*0.009
+                first_queue_length = o.vol_at_lob(1, 0)
+                noimpact_vol = bidvol/num_bins_used*allowed_fraction
                 buy_int = -1
             if mosize<noimpact_vol:
+                logging.info('No impact model using market orders as rates are low')
                 noimpact_vol = mosize*0.95
+                if noimpact_vol<10:
+                    noimpact_vol = mosize * 0.90 + 0.1*noimpact_vol
 
             prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
             alt_prob_order_fill =  o.probordercompletion2(int(jl['time_seconds']),tradetype=='buy')
             marketorderint = 0
             if prob_order_fill>0.1 or alt_prob_order_fill>0.15:
-                marketorderint = int(10*prob_order_fill)
+                marketorderint = int(5*(prob_order_fill+alt_prob_order_fill))
                 if marketorderint>3:
                     marketorderint = int(marketorderint/2)
+                if marketorderint >= num_bins_used:
+                    marketorderint = num_bins_used -1
 
             if ts<noimpact_vol:
                 tradearray.append((0.5+(rd*0.1)) * ts)
@@ -182,12 +192,25 @@ class PublishServer:
                         tickd = -1
                 if mosize * 0.5 > noimpact_vol:
                     tickd = -1
-                ticksaway = [0, buy_int*tickd]
+                else:
+                    tickd = marketorderint*-1
+                if alt_prob_order_fill>0.5:
+                    ticksaway = [buy_int * tickd, buy_int * tickd]
+                else:
+                    if alt_prob_order_fill <0.1:
+                        ticksaway = [0, 0]
+                    else:
+                        ticksaway = [0, buy_int*tickd]
             else:
-                number_trades = int((ts/noimpact_vol)*num_bins_used)
+                number_trades = int((ts/noimpact_vol)*num_bins_used*0.5)
 
                 if number_trades<2:
                     number_trades = 2
+                if number_trades>100:
+                    logging.warn('Market conditions not normal ')
+                    number_trades = number_trades/num_bins_used
+                    if number_trades>400:
+                        number_trades = 400
                 ticksaway = []
                 for j in range(0, int(number_trades)):
                     tradearray.append(rd * ts/number_trades)
@@ -199,7 +222,7 @@ class PublishServer:
                     rd = 0.5+random.random()/4
 
 
-            mydict = {'id': jl['id'], 'valid_for_sec': o.forcast_estimate_time*4, 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': 0.50, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
+            mydict = {'id': jl['id'], 'valid_for_sec': o.tradewindow_sec*3 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)
             try_command(r.publish, chann, rval)
@@ -245,10 +268,12 @@ if __name__ == "__main__":
     # for i in range(1, 10):
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
-    # mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-    #          'exchange': 'Bitmex', 'tradesize': 3200, 'time_seconds': 120}
+    #mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
+    #          'exchange': 'Binance', 'tradesize': 1000, 'time_seconds': 500}
+    #mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
+    #          'exchange': 'Bitmex', 'tradesize': 1000, 'time_seconds': 10}
 
-    # q.put(json.dumps(mydict))
+    #q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')

@@ -71,7 +71,7 @@ class modelob:
         self.datetime = acct.datetime
         self.market = acct.market
         self.latestob = {}
-        self.tradewindow_sec = 300
+        self.tradewindow_sec = 30
 
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
@@ -94,8 +94,8 @@ class modelob:
         self.forcast_estimate_time = 90
         self.probfmt = '%2.9f'
         self.SAVEDEBUG = True
-        self.buy_sum=deque([0.0,1], maxlen=4)
-        self.sell_sum=deque([0.0,1], maxlen=4)
+        self.buy_sum=deque([], maxlen=4)
+        self.sell_sum=deque([], maxlen=4)
         logging.debug('{0} modelling manager initialised'.format(self.tradingpair))
 
     def vol_at_lob(self, num_bins_used, is_buy):
@@ -206,42 +206,59 @@ class modellingmanager(modelob):
         self.asks[:, 3] = np.ones(len(self.asks))
 
     def getlatestob(self,sfile, obfile, pfile):
-        with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
+        try:
+            with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
+                current_time = time.time()
+                latest_ob= json.loads(url.read().decode())
+                # with open('limitorders.json', 'w') as outfile:
+                #     json.dump(latest_ob, outfile)
 
-            current_time = time.time()
+                print(latest_ob)
+                # CONVERTS DATA TO NDARRAY AND GIVES COL NAMES
+                self.bids = convert_to_ndarray(latest_ob['bids'], current_time)
+                self.bids[:,3] = np.zeros(len(self.bids))
+                #savebids = self.bids
+                #savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
 
-            latest_ob= json.loads(url.read().decode())
-            # with open('limitorders.json', 'w') as outfile:
-            #     json.dump(latest_ob, outfile)
+                self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
+                self.asks[:,3] = np.ones(len(self.asks))
+                # saveasks = self.asks
 
-            print(latest_ob)
-            # CONVERTS DATA TO NDARRAY AND GIVES COL NAMES
-            self.bids = convert_to_ndarray(latest_ob['bids'], current_time)
-            self.bids[:,3] = np.zeros(len(self.bids))
-            #savebids = self.bids
-            #savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
+            with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
+                latest_mo = json.loads(url.read().decode())
+                print(latest_mo)
+                # with open('marketorders.json', 'w') as outfile:
+                #     json.dump(latest_mo, outfile)
+                temporders = np.array( [[  float(x['price']), float(x['qty']), int(x['time']) , 1 if x['isBuyerMaker'] else 0]for x in latest_mo] )
+                threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
+                filtorders = temporders[threshold]
+                self.marketorders = filtorders
+                print('no of market orders'+str(len(self.marketorders)))
+                buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
+                sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
+                self.buy_sum.append(buy_sum[1])
+                self.sell_sum.append(sell_sum[1])
+                logging.info('no of market orders'+str(len(self.marketorders)))
+                #market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
+                #market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
+                buy_sum = np.mean(self.buy_sum)
+                sell_sum = np.mean(self.sell_sum)
 
-            self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
-            self.asks[:,3] = np.ones(len(self.asks))
-            # saveasks = self.asks
-
-
-        with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
-            latest_mo = json.loads(url.read().decode())
-            print(latest_mo)
-            # with open('marketorders.json', 'w') as outfile:
-            #     json.dump(latest_mo, outfile)
-            temporders = np.array( [[  float(x['price']), float(x['qty']), int(x['time']) , 1 if x['isBuyerMaker'] else 0]for x in latest_mo] )
-            threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
-            filtorders = temporders[threshold]
-            self.marketorders = filtorders
-            print('no of market orders'+str(len(self.marketorders)))
-            buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
-            sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
-            self.buy_sum.append(buy_sum)
-            self.sell_sum.append(sell_sum)
-            buy_sum = np.mean(self.buy_sum)
-            sell_sum = np.mean(self.sell_sum)
+        except urllib.error.HTTPError as detail:
+            logging.exception(self.tradingpair + ':' + str(detail))
+            if detail.errno in (401,500,404):
+                print('exception http')
+            return
+        except ValueError as ver:
+            logging.exception("ValueError"+str(ver))
+            return
+        except Exception as eer:
+            logging.exception("unexpected Error")
+            logging.warning('Error, may not recover from this')
+            return
+        except:
+            logging.exception("Unhandled Exception")
+            raise
         sum_bids = self.bids.sum(axis=0)
         sum_asks = self.asks.sum(axis=0)
         self.mid = (self.asks[0,0] + self.bids[0,0])*0.5
@@ -263,15 +280,15 @@ class modellingmanager(modelob):
             print(e)
         self.df = nfs
 
-        sell_order_per_sec = sell_sum[1] /self.tradewindow_sec
-        buy_order_per_sec = buy_sum[1]/ self.tradewindow_sec
+        sell_order_per_sec = sell_sum/self.tradewindow_sec
+        buy_order_per_sec = buy_sum/ self.tradewindow_sec
 
         prob_blo_live = (sum_bids[1]-sell_order_per_sec)/(sum_bids[1])
         prob_alo_live = (sum_asks[1] - buy_order_per_sec) / (sum_asks[1])
         floatfmt = '%30.9f'
         timefmt = '%30.3f'
         intfmt = '%i'
-        mfmt = [floatfmt, floatfmt, timefmt, intfmt]
+        mfmt = [floatfmt, floatfmt, timefmt, timefmt]
         if self.SAVEDEBUG:
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimitebgr=',')
@@ -416,7 +433,7 @@ if __name__ == "__main__":
     parser.add_argument("testmode", nargs='?')
     name = 't'
 
-    exchange = 'Bitmex'
+    exchange = 'Binance'#'Bitmex'
     try:
         args = parser.parse_args()
         #print(args.validpair)
@@ -444,13 +461,17 @@ if __name__ == "__main__":
     if name is not None:
         tp.name = name
     else:
-        tp.name = 'XBTUSD' # BTSUSDC for other exchanges
+        if exchange.lower()=='bitmex':
+            tp.name = 'XBTUSD'
+        else:
+            tp.name = 'LTCUSDT' # for other exchanges
 
     tp.market = exchange
     if exchange == 'Bitmex':
         cr = bitmexmanager(tp)
     else:
         cr = modellingmanager(tp)
+        cr.SAVEDEBUG = False
     prefix = './csv/'
     fp = open(prefix+str(tp.name)+'prob4.csv', 'ab')
     f = open(prefix+str(tp.name)+'marketorders4.csv', 'ab')
