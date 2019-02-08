@@ -168,9 +168,9 @@ class PublishServer:
                 buy_int = -1
             if mosize<noimpact_vol:
                 logging.info('No impact model using market orders as rates are low')
-                noimpact_vol = mosize*0.95
-                if noimpact_vol<10:
-                    noimpact_vol = mosize * 0.90 + 0.1*noimpact_vol
+                noimpact_vol = mosize*0.5 + 0.5*noimpact_vol
+                #if noimpact_vol<10:
+                #    noimpact_vol = mosize * 0.90 + 0.1*noimpact_vol
 
             prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
             alt_prob_order_fill =  o.probordercompletion2(int(jl['time_seconds']),tradetype=='buy')
@@ -222,7 +222,7 @@ class PublishServer:
                     rd = 0.5+random.random()/4
 
 
-            mydict = {'id': jl['id'], 'valid_for_sec': o.tradewindow_sec*3 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
+            mydict = {'id': jl['id'], 'pred_mid': o.mid, 'valid_for_sec': o.tradewindow_sec*4 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
             logging.info('publishing'+str(mydict))
             rval = json.dumps(mydict)
             try_command(r.publish, chann, rval)
