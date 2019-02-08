@@ -268,10 +268,10 @@ if __name__ == "__main__":
     # for i in range(1, 10):
     #     mydict['id'] = random.random()
     #     q.put(json.dumps(mydict))
-    #mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
+    # mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
     #          'exchange': 'Binance', 'tradesize': 1000, 'time_seconds': 500}
     #mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-    #          'exchange': 'Bitmex', 'tradesize': 1000, 'time_seconds': 10}
+    #          'exchange': 'Bitmex', 'tradesize': 1000, 'time_seconds': 120}
 
     #q.put(json.dumps(mydict))
 
