@@ -224,6 +224,7 @@ class PublishServer:
 
             mydict = {'id': jl['id'], 'pred_mid': o.mid, 'valid_for_sec': o.tradewindow_sec*4 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
             logging.info('publishing'+str(mydict))
+            print('publishing'+str(mydict))
             rval = json.dumps(mydict)
             try_command(r.publish, chann, rval)
             print('done publish')
@@ -270,10 +271,10 @@ if __name__ == "__main__":
     #     q.put(json.dumps(mydict))
     # mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
     #          'exchange': 'Binance', 'tradesize': 1000, 'time_seconds': 500}
-    #mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-    #          'exchange': 'Bitmex', 'tradesize': 1000, 'time_seconds': 120}
+    mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
+              'exchange': 'Bitmex', 'tradesize': 1000, 'time_seconds': 120}
 
-    #q.put(json.dumps(mydict))
+    q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')

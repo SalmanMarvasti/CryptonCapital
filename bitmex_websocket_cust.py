@@ -31,7 +31,8 @@ class BitMEXWebsocket:
                         datefmt='%m-%d %H:%M',
                         filename='./bitmexWScust.log',
                         filemode='w')
-        self.logger.debug("Initializing CUSTOM WebSocket.")
+        self.logger = logging
+        logging.debug("Initializing CUSTOM WebSocket.")
         print('CUSTOM BITMEX')
 
         self.endpoint = endpoint
@@ -122,7 +123,7 @@ class BitMEXWebsocket:
                                          on_error=self.__on_error,
                                          header=self.__get_auth())
 
-        self.wst = reactor.callInThread(target=lambda: self.ws.run_forever())
+        self.wst = threading.Thread(target=lambda: self.ws.run_forever())
         self.wst.daemon = True
         self.wst.start()
         self.logger.debug("Started thread")
