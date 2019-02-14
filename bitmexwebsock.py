@@ -11,14 +11,14 @@ from time import sleep
 
 # Basic use of websocket.
 
-def getBitmexWs():
+def getBitmexWs(symb='XBTUSD'):
 
 
 
 
     # Instantiating the WS will make it connect. Be sure to add your api_key/api_secret.
 
-    ws = BitMEXWebsocket(endpoint="wss://www.bitmex.com/", symbol="XBTUSD",
+    ws = BitMEXWebsocket(endpoint="wss://www.bitmex.com/", symbol=symb,
 
                          api_key='aHujwNKFyI3sxd5mKffKSf5O', api_secret='L3cVchQUvGnzJCxc_X8jIxuCj0dEs5IDyMmxYRtbZNkyMOrA')
 

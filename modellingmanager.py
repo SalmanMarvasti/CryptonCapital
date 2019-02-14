@@ -76,10 +76,15 @@ class modelob:
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
             self.tradeeurl = "https://api.binance.com/api/v1/trades?symbol={0}"
-        if self.market in ('BitMex', 'Bitmex'): #'http://localhost:{port}/users'.format(port=38803)
+        if self.market in ('bitmex', 'BitMex', 'Bitmex'): #'http://localhost:{port}/users'.format(port=53581)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
+            #
             self.tradewindow_sec = 25 # bitmex trade window must be lower as buyer or seller is not specified
+        if self.market.lower() in ('bitmexws'):
+            self.tradeeurl = 'http://localhost:{port}/users'.format(port=53581)
+            self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
+
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
@@ -457,17 +462,17 @@ if __name__ == "__main__":
 
     if exchange is None:
         print('setting default exchange Bitmex')
-        exchange = 'Bitmex'
+        exchange = 'bitmexws'
     if name is not None:
         tp.name = name
     else:
-        if exchange.lower()=='bitmex':
+        if exchange.lower() in ('bitmex', 'bitmexws'):
             tp.name = 'XBTUSD'
         else:
             tp.name = 'LTCUSDT' # for other exchanges
 
     tp.market = exchange
-    if exchange == 'Bitmex':
+    if exchange.lower() == 'bitmex':
         cr = bitmexmanager(tp)
     else:
         cr = modellingmanager(tp)
