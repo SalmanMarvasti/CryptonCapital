@@ -81,7 +81,7 @@ class modelob:
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
             #
             self.tradewindow_sec = 25 # bitmex trade window must be lower as buyer or seller is not specified
-        if self.market.lower() in ('bitmexws'):
+        if self.market.lower() =='bitmexws':
             self.tradeeurl = 'http://localhost:{port}/users'.format(port=53581)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
 
@@ -462,7 +462,7 @@ if __name__ == "__main__":
 
     if exchange is None:
         print('setting default exchange Bitmex')
-        exchange = 'bitmexws'
+        exchange = 'bitmex'
     if name is not None:
         tp.name = name
     else:
