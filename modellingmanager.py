@@ -40,6 +40,16 @@ def diff_df_on_price(tdf1, tdf2):
     tdf1['change'] =  res['amount_y'] - res['amount_x']
     return tdf1
 
+def calc_vwap(bids, asks):
+    R = 4# bids.shape[0]
+    totalb = np.sum(bids[0:R,1])
+    totala = np.sum(asks[0:R,1])
+    bid_vwap=0
+    ask_vwap=0
+    for r in range(1, R):
+        bid_vwap += bids[r][0]*bids[r][1]
+        ask_vwap += asks[r][0]*asks[r][1]
+    return (bid_vwap/totalb, ask_vwap/totala)
 
 def convert_to_ndarray(k, ctime, isAsk=0):
     c = 0
@@ -51,6 +61,7 @@ def convert_to_ndarray(k, ctime, isAsk=0):
         for d in range(0,4):
             if (d < 2):
                 mya[c, d] = float(k[c][d])
+
             else:
                 if d == 2:
                     mya[c, 2] = ctime
@@ -227,6 +238,8 @@ class modellingmanager(modelob):
 
                 self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
                 self.asks[:,3] = np.ones(len(self.asks))
+                (bvwap, avwap) = calc_vwap(self.bids, self.asks)
+                self.vwap = (bvwap+avwap)/2
                 # saveasks = self.asks
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
@@ -462,12 +475,12 @@ if __name__ == "__main__":
 
     if exchange is None:
         print('setting default exchange Bitmex')
-        exchange = 'bitmex'
+        exchange = 'bitmexws'
     if name is not None:
         tp.name = name
     else:
         if exchange.lower() in ('bitmex', 'bitmexws'):
-            tp.name = 'XBTUSD'
+            tp.name = 'ETHUSD'  #'XBTUSD'
         else:
             tp.name = 'LTCUSDT' # for other exchanges
 

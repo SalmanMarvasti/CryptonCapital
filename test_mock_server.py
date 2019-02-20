@@ -95,7 +95,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         ws = getBitmexWs(sys.argv[1])
     else:
-        ws = getBitmexWs()
+        ws = getBitmexWs('ETHUSD')
     t=TestMockServer()
     t.setup_class()
     t.test_request_response()
