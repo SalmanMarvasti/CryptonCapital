@@ -46,7 +46,7 @@ def calc_vwap(bids, asks):
     totala = np.sum(asks[0:R,1])
     bid_vwap=0
     ask_vwap=0
-    for r in range(1, R):
+    for r in range(0, R):
         bid_vwap += bids[r][0]*bids[r][1]
         ask_vwap += asks[r][0]*asks[r][1]
     return (bid_vwap/totalb, ask_vwap/totala)
@@ -82,7 +82,7 @@ class modelob:
         self.datetime = acct.datetime
         self.market = acct.market
         self.latestob = {}
-        self.tradewindow_sec = 30
+        self.tradewindow_sec = 29
 
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
@@ -201,15 +201,7 @@ class modellingmanager(modelob):
         else:
             return (1-np.power(np.mean(self.blo_probs),n))
 
-    # def probordercompletion(self, timeframe, isask): # approximation based on linear
-    #     n = timeframe/self.tradewindow_sec
-    #     i = int(n)
-    #     if n<1:
-    #         i = 1
-    #     if isask:
-    #         return n* (1-np.power(np.mean(self.alo_probs),i))  # here
-    #     else:
-    #         return n* (1-np.power(np.mean(self.blo_probs), i))
+
 
 
     def set_lob_data(current_time, latest_ob ):
@@ -350,8 +342,8 @@ class bitmexmanager(modellingmanager):
 
                 self.asks = convert_to_ndarray(latest_ob['asks'], current_time, 1)
                 mid = (self.asks[0,0] + self.bids[0,0])*0.5
-        
-                # saveasks = self.asks
+                (bvwap, avwap) = calc_vwap(self.bids, self.asks)
+                self.vwap = (bvwap + avwap) / 2
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
                 latest_mo = json.loads(url.read().decode())
@@ -423,7 +415,7 @@ class bitmexmanager(modellingmanager):
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
-            nn = np.array([[current_time * 1000, mid,quoted['mid'], prob_blo_live, prob_alo_live, self.probordercompletion2(self.forcast_estimate_time ,0), self.probordercompletion2(self.forcast_estimate_time ,1) ,self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1) ]])
+            nn = np.array([[current_time * 1000, mid,quoted['mid'], prob_blo_live, prob_alo_live, self.probordercompletion2(self.forcast_estimate_time ,0), self.probordercompletion2(self.forcast_estimate_time ,1) ,self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1), self.vwap ]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, nnfmt, delimiter=',')
             pfile.flush()
@@ -475,7 +467,7 @@ if __name__ == "__main__":
 
     if exchange is None:
         print('setting default exchange Bitmex')
-        exchange = 'bitmexws'
+        exchange = 'bitmex'
     if name is not None:
         tp.name = name
     else:
