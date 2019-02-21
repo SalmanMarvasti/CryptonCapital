@@ -99,8 +99,8 @@ class modelob:
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([0.99, 1], maxlen=11)
-        self.alo_probs = deque([0.99, 1], maxlen=11)
+        self.blo_probs = deque([0.99, 1], maxlen=15)
+        self.alo_probs = deque([0.99, 1], maxlen=15)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
