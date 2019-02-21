@@ -24,11 +24,12 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
 
     def createListFromTrades(self, listTrades):
         #arrayTrades = np.zeros(len(listTrades), 4)
+        global pair
         blist = []
         r=0
         for trade in listTrades:
             #arrayTrades[r, trade.]
-            dic = {'price': trade['price'], 'qty':trade['size'],'time': convert_utc_to_epoch_trades(trade['timestamp']), 'isBuyerMaker': int(trade['side'].lower()!='buy')}
+            dic = {'pair': pair, 'price': trade['price'], 'qty':trade['size'],'time': convert_utc_to_epoch_trades(trade['timestamp']), 'isBuyerMaker': int(trade['side'].lower()!='buy')}
             blist.append(dic)
             r = r+1
         return blist
@@ -63,6 +64,9 @@ def get_free_port():
 
 
 class TestMockServer(object):
+
+    def __init__(self, name):
+        self.tradepair = name
     @classmethod
     def setup_class(cls):
         # Configure mock server.
@@ -92,12 +96,19 @@ class TestMockServer(object):
 import time
 import sys
 if __name__ == "__main__":
+    global pair
+    pair = 'XBTUSD'
     if len(sys.argv)>1:
+        pair = sys.argv[1]
         ws = getBitmexWs(sys.argv[1])
     else:
-        ws = getBitmexWs('ETHUSD')
-    t=TestMockServer()
+        ws = getBitmexWs(pair)
+    t=TestMockServer(pair)
     t.setup_class()
     t.test_request_response()
     while True:
         time.sleep(1)
+
+
+
+pair = ''

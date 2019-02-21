@@ -41,7 +41,7 @@ def diff_df_on_price(tdf1, tdf2):
     return tdf1
 
 def calc_vwap(bids, asks):
-    R = 4# bids.shape[0]
+    R = 6# bids.shape[0]
     totalb = np.sum(bids[0:R,1])
     totala = np.sum(asks[0:R,1])
     bid_vwap=0
@@ -49,7 +49,7 @@ def calc_vwap(bids, asks):
     for r in range(0, R):
         bid_vwap += bids[r][0]*bids[r][1]
         ask_vwap += asks[r][0]*asks[r][1]
-    return (bid_vwap/totalb, ask_vwap/totala)
+    return (bid_vwap/totalb, ask_vwap/totala, totala, totalb)
 
 def convert_to_ndarray(k, ctime, isAsk=0):
     c = 0
@@ -99,8 +99,8 @@ class modelob:
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([0.1], maxlen=10)
-        self.alo_probs = deque([0.1], maxlen=10)
+        self.blo_probs = deque([0.99, 1], maxlen=11)
+        self.alo_probs = deque([0.99, 1], maxlen=11)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -230,8 +230,8 @@ class modellingmanager(modelob):
 
                 self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
                 self.asks[:,3] = np.ones(len(self.asks))
-                (bvwap, avwap) = calc_vwap(self.bids, self.asks)
-                self.vwap = (bvwap+avwap)/2
+                (bvwap, avwap, totala, totalb) = calc_vwap(self.bids, self.asks)
+                self.vwap = (bvwap*totalb+avwap*totala)/(totala+totalb)
                 # saveasks = self.asks
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
@@ -240,7 +240,7 @@ class modellingmanager(modelob):
                 # with open('marketorders.json', 'w') as outfile:
                 #     json.dump(latest_mo, outfile)
                 temporders = np.array( [[  float(x['price']), float(x['qty']), int(x['time']) , 1 if x['isBuyerMaker'] else 0]for x in latest_mo] )
-                threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
+                threshold = temporders[:,2]>int((current_time - self.tradewindow_sec-5) * 1000)
                 filtorders = temporders[threshold]
                 self.marketorders = filtorders
                 print('no of market orders'+str(len(self.marketorders)))
@@ -301,9 +301,9 @@ class modellingmanager(modelob):
         mfmt = [floatfmt, floatfmt, timefmt, timefmt]
         if self.SAVEDEBUG:
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
-            np.savetxt(obfile, self.bids, fmt=mfmt, delimitebgr=',')
+            np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
-            nn = np.array([[current_time * 1000, mid, quoted['mid'], prob_blo_live, prob_alo_live,
+            nn = np.array([[current_time * 1000, self.mid, self.vwap, prob_blo_live, prob_alo_live,
                             self.probordercompletion(self.forcast_estimate_time, 0),
                             self.probordercompletion(self.forcast_estimate_time, 1)]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
@@ -356,7 +356,7 @@ class bitmexmanager(modellingmanager):
                 #if quoted['mid']>mid:
                 #    mid = quoted['mid']
                 temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
-                threshold = temporders[:,2]>int((current_time - self.tradewindow_sec) * 1000)
+                threshold = temporders[:,2]>int((current_time - self.tradewindow_sec-5) * 1000)
                 filtorders = temporders[threshold]
                 self.marketorders = filtorders
                 logging.info('no of market orders'+str(len(self.marketorders)))
@@ -415,7 +415,7 @@ class bitmexmanager(modellingmanager):
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
-            nn = np.array([[current_time * 1000, mid,quoted['mid'], prob_blo_live, prob_alo_live, self.probordercompletion2(self.forcast_estimate_time ,0), self.probordercompletion2(self.forcast_estimate_time ,1) ,self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1), self.vwap ]])
+            nn = np.array([[current_time * 1000, mid,self.vwap, prob_blo_live, prob_alo_live, self.probordercompletion2(self.forcast_estimate_time ,0), self.probordercompletion2(self.forcast_estimate_time ,1) ,self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1)]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, nnfmt, delimiter=',')
             pfile.flush()
@@ -466,13 +466,14 @@ if __name__ == "__main__":
 
 
     if exchange is None:
-        print('setting default exchange Bitmex')
-        exchange = 'bitmex'
+
+        exchange = 'bitmexws'
+        print('setting default exchange '+exchange)
     if name is not None:
         tp.name = name
     else:
         if exchange.lower() in ('bitmex', 'bitmexws'):
-            tp.name = 'ETHUSD'  #'XBTUSD'
+            tp.name = 'XBTUSD'  #'XBTUSD'
         else:
             tp.name = 'LTCUSDT' # for other exchanges
 
@@ -481,7 +482,7 @@ if __name__ == "__main__":
         cr = bitmexmanager(tp)
     else:
         cr = modellingmanager(tp)
-        cr.SAVEDEBUG = False
+        # cr.SAVEDEBUG = False
     prefix = './csv/'
     fp = open(prefix+str(tp.name)+'prob4.csv', 'ab')
     f = open(prefix+str(tp.name)+'marketorders4.csv', 'ab')

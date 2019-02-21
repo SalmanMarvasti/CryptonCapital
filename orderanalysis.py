@@ -13,8 +13,7 @@ access_key = 'AKIAJW3Q6QOU2DLIWVVA'
 secret_key = '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'
 from boto.s3.connection import S3Connection
 DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
-
-#DOWNLOAD_LOCATION_PATH = "d:/bitmex_new/"
+from modellingmanager import modlob
 
 #DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
 
@@ -197,7 +196,7 @@ def convert_utc_to_epoch_trades(timestamp_string):
 def rewrite_cointick_trades(inFile, outFile):
     print('processing {}'.format(inFile))
     f = pd.read_csv(inFile, delimiter=';')
-    df = f.iloc[:,[0, -3,-2,-1]]  # ['date','price','base_amount','taker_size']
+    df = f.iloc[:,[0, -3,-2,-1]]  # ['date','price','base_amount','taker_side']
     df.loc[:,'time_exchange'] = df['time_exchange'].apply(convert_utc_to_epoch_trades)
     col = df.loc[:,'taker_side'] == 'SELL'
     df.loc[:,'taker_side'] = col.astype(int)
@@ -205,7 +204,6 @@ def rewrite_cointick_trades(inFile, outFile):
         w = csv.writer(file)
         w.writerow(['date','price', 'amount', 'sell'])
         w.writerows(df.values)
-
 
 
 def just_convert_dates(inFile, outFile):
@@ -221,9 +219,16 @@ def just_convert_dates(inFile, outFile):
             first = False
 
 
+def dateparse (time_in_secs):
+    return datetime.datetime.fromtimestamp(float(time_in_secs))
+
+def read_trades():
+    x = pandas.read_csv('data.csv',delimiter=',', parse_dates=True,date_parser=dateparse, index_col='date')
+    return x
 
 import time
 import gc
+
 def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
 
 
@@ -251,6 +256,131 @@ def rewrite_cointick_chunk(inFile, outFile,save_plots=False):
                 s=etime
 
     print('finished appending')
+
+
+count_hist = 0
+prevdate=0
+def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=False):
+    # df = pd.read_csv(inFile, delimiter=';')
+    global count_hist
+    global prevdate
+
+    # df = df.loc[df['update_type'] != 'SNAPSHOT']
+
+    new_ot = pd.DataFrame(
+        {'date': ot.time_exchange.apply(convert_utc_to_epoch), 'type': ot.is_buy, 'price': ot.entry_px,
+         'amount': ot.entry_sx, 'update_type': ot.update_type}, columns=['date', 'type', 'price', 'amount', 'update_type'])
+    new_ot.sort_values(['date','type'], kind='mergesort', inplace=True)
+
+
+    #  new_ob.type = [0 if x else 1 for x in new_ob.type]
+
+    # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
+    cur_dates = new_ot['date'].unique()
+    text_dates = pd.to_datetime(cur_dates, unit='s')
+    x = 0
+    print('going through dates')
+
+    if True:
+
+        # update_addsub = ot.update_type
+
+
+        for cdate in cur_dates:
+            temp_ot = new_ot.loc[new_ot.date == cdate]
+            #bids = temp_ot.loc[temp_ot.type==1]
+            # asks = temp_ot.loc[temp_ot.type==0]
+
+            for i in range(0, len(temp_ot)):
+                row_to_append = temp_ot.iloc[i]
+                p = (row_to_append.price, row_to_append.type)  # this rows price
+                urow_to_append = row_to_append.update_type
+
+                if nob.index.isin([p]).any() and nob.loc[p,'amount']!=0 and urow_to_append[0:3]!='SNA':  # assume buy and ask correctly match
+                    if p[1]!= row_to_append.type:
+                        # if nob.loc[p,'amount']!=0:
+                        print('not_ok'+urow_to_append)
+
+                    if urow_to_append[0] == 'A':
+                        if p[1] != row_to_append.type:
+                            print('error')
+                            #nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                        else:
+                            nob.loc[p,'amount'] += row_to_append[3] # ignores index column
+                    else:
+                        if urow_to_append == 'SUB':
+                            if p[1] != row_to_append.type:
+                                raise ValueError('error nothing to subtract setting')
+                                # nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
+                            else:
+                                if nob.loc[p, 'amount']==0 or  nob.loc[p,'amount']<row_to_append.amount:
+                                    raise ValueError('error cant have negative')
+                                nob.loc[p,'amount'] -= row_to_append[3]
+
+
+                        else:
+                            print('*****Setting' + urow_to_append +row_to_append.amount)
+                            nob.loc[p, :] = row_to_append[[ 0, 3]]
+
+
+                else:
+                    if urow_to_append[0]=='A' or urow_to_append=='SET':
+                        nob.loc[p,:] = row_to_append[[0,3]]
+                    else:
+                        if(urow_to_append == 'SNAPSHOT'):
+                            nob = new_ot.loc[new_ot.update_type=='SNAPSHOT'].drop(['update_type'],axis=1)
+                            if(nob.date.unique().shape[0]!=1):
+                                raise ValueError("Snapshot from multiple dates"+str(p)+str(text_dates[x]))
+                            print('Found SNAPSHOT in middle of conversion')
+                            if nob.shape[0]<20:
+                                raise ValueError("Snapshot split"+str(p)+str(text_dates[x]))
+                            start_row = x+nob.shape[0]
+                            snap_found_idx = 0
+                            snap_not_found_idx = 0
+                            for j in range(len(ot)):
+                                if ot.update_type.iloc[j] == 'SNAPSHOT':
+                                    snap_found_idx = j
+                                else:
+                                    if snap_found_idx > 9:
+                                        if ot.update_type.iloc[j] != 'SNAPSHOT':
+                                            snap_not_found_idx = j
+                                            break
+                            if snap_not_found_idx:
+                                start_row = snap_not_found_idx
+                            nob.set_index(['price', 'type'], inplace=True)
+                            nob = nob.loc[nob.amount != 0]
+                            snapshot_removed_ot = ot.iloc[start_row:-1,:]
+                            nob = return_bids_asks_cointick(inFile, outFile, snapshot_removed_ot, nob, w, save_plots)
+                            return nob
+                        if row_to_append.amount !=0:
+                            raise ValueError("cannot subtract from nonexistant price"+str(p)+urow_to_append+' date'+str(text_dates[x]))
+
+
+
+        nob.loc[:,'date'] = cdate
+        nob.sort_index(inplace=True)
+
+        if (cdate - prevdate)>1:
+            nob = nob.loc[nob.amount != 0]
+            rnob = nob.reset_index()
+            if count_hist>2000:
+                save_plots = False # Temp remove TODO
+
+            if save_plots:
+                nobprice = rnob.price.values
+                nobamount = rnob['amount'].values
+                plt.clf()
+                N, hbins, patches = plt.hist(nobprice, len(nobprice), weights=nobamount)
+                plt.title(str(text_dates[x]) + ' vp')  # +str(inst_vwap(nob))s
+                colorhistbars(patches, rnob['type'].values)
+                plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(count_hist) + '.png')
+                count_hist += 1
+            w.writerows(rnob.values)
+            print('writing nob' + str(x)+' '+str(text_dates[x]))
+            prevdate = cdate
+        x = x + 1
+    return nob
+
 
 
 count_hist = 0
