@@ -466,7 +466,6 @@ if __name__ == "__main__":
 
 
     if exchange is None:
-
         exchange = 'bitmexws'
         print('setting default exchange '+exchange)
     if name is not None:

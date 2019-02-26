@@ -174,6 +174,24 @@ class PublishServer:
 
             prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
             alt_prob_order_fill =  o.probordercompletion2(int(jl['time_seconds']),tradetype=='buy')
+            cond_for_adj = buy_int and o.vwap>o.mid
+            cond_for_adj = cond_for_adj or buy_int==0 and o.vwap<o.mid
+            abs_diff = o.mid = o.vwap
+            if abs_diff>3:
+                abs_diff = 3
+            if abs_diff<0.4:
+                abs_diff = 0.4
+
+            if(alt_prob_order_fill<0.3 and cond_for_adj ):
+                logging.info('adjusting probability')
+                alt_prob_order_fill += 0.15 * abs_diff
+                prob_order_fill += 0.15 * abs_diff
+                alt_prob_order_fill +=  0.1*o.probordercompletion2(int(jl['time_seconds']),tradetype!='buy')
+            else:
+                if alt_prob_order_fill>0.8:
+                    other_prob = o.probordercompletion2(int(jl['time_seconds']), tradetype != 'buy')
+                    alt_prob_order_fill = 0.8*alt_prob_order_fill + 0.2*other_prob
+
             marketorderint = 0
             if prob_order_fill>0.1 or alt_prob_order_fill>0.15:
                 marketorderint = int(5*(prob_order_fill+alt_prob_order_fill))
