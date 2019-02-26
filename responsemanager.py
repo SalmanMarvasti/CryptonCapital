@@ -133,7 +133,7 @@ class PublishServer:
             rd = random.random()
             exchange = jl['exchange']
             if exchange.lower()=='binance':
-                allowed_fraction = 0.1
+                allowed_fraction = 0.15
             else:
                 allowed_fraction = 0.01
 
@@ -289,10 +289,10 @@ if __name__ == "__main__":
     #     q.put(json.dumps(mydict))
     # mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
     #          'exchange': 'Binance', 'tradesize': 1000, 'time_seconds': 500}
-    #mydict = {'id': random.randint(1, 1000), 'pair': 'ETHUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-    #          'exchange': 'Bitmex', 'tradesize': 1000, 'time_seconds': 190}
+    mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
+              'exchange': 'binance', 'tradesize': 1000, 'time_seconds': 400}
 
-    #q.put(json.dumps(mydict))
+    q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')
