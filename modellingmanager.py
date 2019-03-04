@@ -265,6 +265,7 @@ class modellingmanager(modelob):
         except Exception as eer:
             logging.exception("unexpected Error")
             logging.warning('Error, may not recover from this')
+            print(str(eer))
             return
         except:
             logging.exception("Unhandled Exception")
@@ -466,8 +467,7 @@ if __name__ == "__main__":
 
 
     if exchange is None:
-
-        exchange = 'bitmexws'
+        exchange = 'Binance'
         print('setting default exchange '+exchange)
     if name is not None:
         tp.name = name
