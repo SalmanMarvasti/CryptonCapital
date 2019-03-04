@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import urllib, json
-import pickle
+import pickle# 5 as pickle
 from collections import namedtuple, deque
 import datetime as dt
 import time
@@ -79,7 +79,7 @@ class modelob:
         global r
         self.tradingpair = acct.name
 
-        self.datetime = acct.datetime
+        self.datetime = dt.datetime.now()
         self.market = acct.market
         self.latestob = {}
         self.tradewindow_sec = 29
@@ -132,14 +132,14 @@ class modelob:
     def fit_gamma(self):
         fit_alpha, fit_loc, fit_beta = stats.gamma.fit(data)
         print(fit_alpha, fit_loc, fit_beta)
-        # (5.0833692504230008, 100.08697963283467, 21.739518937816108)
-
-        print(alpha, loc, beta)
-        # (5, 100.5, 22)
         return fit_alpha, fit_loc,fit_beta
+
     def loadfrompickle(self):
         file = open(self.filepath +'df/'+self.tradingpair+'dataframe.pkl', 'rb')
-        return pickle.load(file)
+        tmp_dict = pickle.load(file)
+        file.close()
+        #self.__dict__.update(tmp_dict)
+        return tmp_dict
 
     def saveobjecttofile(self):
         with atomic_write(self.filepath +'df/'+self.tradingpair+'dataframe.pkl', mode='wb', overwrite=True) as output:
