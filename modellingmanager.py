@@ -36,7 +36,7 @@ def convert_df_bins(d2, bins):
 def diff_df_on_price(tdf1, tdf2):
     # index should be reset if necessary
     res = tdf1.merge(tdf2, on='price', how='outer', indicator=True)
-    res = fillna(value={'amount_y': 0, 'amount_x': 0})
+    #res = np.fill(value={'amount_y': 0, 'amount_x': 0})
     tdf1['change'] =  res['amount_y'] - res['amount_x']
     return tdf1
 
@@ -202,9 +202,7 @@ class modellingmanager(modelob):
             return (1-np.power(np.mean(self.blo_probs),n))
 
 
-
-
-    def set_lob_data(current_time, latest_ob ):
+    def set_lob_data(self, current_time, latest_ob ):
         self.bids = convert_to_ndarray(latest_ob['bids'], current_time)
         self.bids[:, 3] = np.zeros(len(self.bids))
         # savebids = self.bids

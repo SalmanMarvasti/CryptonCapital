@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import csv
 directory = os.fsencode(DOWNLOAD_LOCATION_PATH)
 #tempdf = pd.read_csv(DOWNLOAD_LOCATION_PATH+'binance.csv')
-#validpairs = tempdf['PairNameApi']
+validpairs = ['XBTUSD', 'BTCUSDT', 'ETHUSD', 'ETHUSDT']
 
 
 def bid_ask_spread(df):
@@ -226,7 +226,7 @@ def dateparse (time_in_secs):
     return datetime.datetime.fromtimestamp(float(time_in_secs))
 
 def read_trades():
-    x = pandas.read_csv('data.csv',delimiter=',', parse_dates=True,date_parser=dateparse, index_col='date')
+    x = pd.read_csv('data.csv',delimiter=',', parse_dates=True,date_parser=dateparse, index_col='date')
     return x
 
 import time
