@@ -5,15 +5,15 @@ import io
 # salman
 # %iCgxxG!R[Qe
 
-import boto.s3.connection
-from boto.exception import S3ResponseError
+#import boto.s3.connection
+#from boto.exception import S3ResponseError
 import sys, os
 import pandas as pd
 access_key = 'AKIAJW3Q6QOU2DLIWVVA'
 secret_key = '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'
-from boto.s3.connection import S3Connection
+#from boto.s3.connection import S3Connection
 DOWNLOAD_LOCATION_PATH = os.path.expanduser("~") + "/s3-backup/"
-from modellingmanager import modlob
+from modellingmanager import modelob
 
 #DOWNLOAD_LOCATION_PATH = "/media/oem/CF7C-A41D" + "/s3-backup/"
 
@@ -34,12 +34,15 @@ def bid_ask_spread(df):
 def reformatdf(df):
     return df.drop(columns=['type'])
 
+def convert_df_bins(d2, bins):
+    # d2['bins'] =
+    return d2.groupby(pd.cut(d2['price'], bins)).sum()
+
 def calc_diff(cf, pf, bins):
     bids = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'b']), bins)
     asks = convert_df_bins(reformatdf(cf.loc[cf['type'] == 'a']), bins)
     pbids = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'b']), bins)
     pasks = convert_df_bins(reformatdf(pf.loc[pf['type'] == 'a']), bins)
-
     a = asks.sub(pasks)
     b = bids.sub(pbids)
     return b,a
