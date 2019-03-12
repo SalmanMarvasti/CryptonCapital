@@ -8,7 +8,7 @@ import random
 import queue
 # from modellingmanager import create_model, modellingmanager, bitmexmanager
 credentials = namedtuple('credentials', ('api', 'secret', 'endpoint'))
-r = redis.StrictRedis(host='localhost',  port=6379, db=0)
+r  = redis.StrictRedis(host='localhost',  port=6379, db=0)
 max_retries = 10
 
 
@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.DEBUG,
 
 BUF_SIZE = 100
 q = queue.Queue(BUF_SIZE)
-
+qres =  queue.Queue(BUF_SIZE)
 
 class ReadRequestResponseThread(threading.Thread):
     def __init__(self, group=None, target='test', name=None,
@@ -58,7 +58,7 @@ class RequestThread(threading.Thread):
                 credentials.secret = "Test@123"
                 credentials.endpoint = "redis.pinksphere.com"
                 cr = PublishServer(credentials)
-                cr.publishdummy(self.target)
+                cr.requestItems(self.target)
 
                 time.sleep(random.random())
         time.sleep(1)
@@ -88,7 +88,7 @@ def try_command(f, *args, **kwargs):
 
 
 def connredis(h):
-    r = redis.StrictRedis(host=h, password='Test@123', port=6379, db=0)
+    r = redis.StrictRedis(host='ab722e68624e211e9b8160e2a8d9724d-949947629.us-east-1.elb.amazonaws.com',password='Test@123', port=6379, db=0)
     return r
 
 class PublishServer:
@@ -104,10 +104,10 @@ class PublishServer:
         self.secret = acct.secret
         self.endpoint = acct.endpoint
         self.redis = connredis('redis.pinksphere.com')
-        # r = self.redis
+        r = self.redis
 
 
-    def publishdummy(self, chann='test', isjson=False, **args):
+    def requestItems(self, chann='test', isjson=False, **args):
         global r
         channel = r.pubsub()
         i = 0
@@ -141,10 +141,10 @@ class PublishServer:
             message = try_command(p.get_message)
             # message = p.get_message()
             if message and message['type']=='message':
-                print('received publishdummy and getting message')
+                print('received requestItems and getting message')
                 item = message['data']
                 print( "Subscriber: %s" % item)
-                q.put(str(message['data'].decode('utf-8')))
+                qres.put(str(message['data'].decode('utf-8')))
                 logging.debug('Putting ' + str(item)
                               + ' : ' + str(q.qsize()) + ' items in redis')
 
@@ -169,10 +169,12 @@ if __name__ == "__main__":
 
     p.start()
     time.sleep(7)
+    c.start()
     print('adding more stuff to queue')
     for i in range(1, 10):
         mydict['id'] = random.random()
 
     p.join()
+    c.join()
 
 
