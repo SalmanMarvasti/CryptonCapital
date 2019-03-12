@@ -161,14 +161,15 @@ if __name__ == "__main__":
     mydict = {'id': random.randint(1,1000), 'pair':'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1, 'exchange':'Bitmex', 'tradesize':10, 'time_seconds': 120}
 
     q.put(json.dumps(mydict))
-    for i in range(1, 10):
+    for i in range(1, 4):
         mydict['id'] = random.random()
         q.put(json.dumps(mydict))
+        mydict['type'] = 'sell'
     p = RequestThread(name='request', target='trade')
     c = ReadRequestResponseThread(name='response', target='traderesponse' )
 
     p.start()
-    time.sleep(7)
+    #time.sleep(7)
     c.start()
     print('adding more stuff to queue')
     for i in range(1, 10):

@@ -176,16 +176,16 @@ class PublishServer:
             alt_prob_order_fill =  o.probordercompletion2(int(jl['time_seconds']),tradetype=='buy')
             cond_for_adj = buy_int and o.vwap>o.mid
             cond_for_adj = cond_for_adj or buy_int==0 and o.vwap<o.mid
-            abs_diff = o.mid = o.vwap
+            abs_diff = o.mid - o.vwap
             if abs_diff>3:
-                abs_diff = 3
+                abs_diff = 2
             if abs_diff<0.4:
                 abs_diff = 0.4
 
-            if(alt_prob_order_fill<0.3 and cond_for_adj ):
-                logging.info('adjusting probability')
-                alt_prob_order_fill += 0.15 * abs_diff
-                prob_order_fill += 0.15 * abs_diff
+            if(alt_prob_order_fill<0.2 and cond_for_adj ):
+                logging.info('adjusting probability'+str(abs_diff))
+                alt_prob_order_fill += 0.10 * abs_diff
+                prob_order_fill += 0.10 * abs_diff
                 alt_prob_order_fill +=  0.1*o.probordercompletion2(int(jl['time_seconds']),tradetype!='buy')
             else:
                 if alt_prob_order_fill>0.8:
@@ -289,10 +289,10 @@ if __name__ == "__main__":
     #     q.put(json.dumps(mydict))
     # mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
     #          'exchange': 'Binance', 'tradesize': 1000, 'time_seconds': 500}
-    # mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
-    #           'exchange': 'binance', 'tradesize': 1000, 'time_seconds': 400}
-    #
-    # q.put(json.dumps(mydict))
+    mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
+              'exchange': 'bitmex', 'tradesize': 1000, 'time_seconds': 400}
+
+    q.put(json.dumps(mydict))
 
     p = RequestThread(name='request',target='trade')
     c = ResponseThread(name='response',target='traderesponse')
