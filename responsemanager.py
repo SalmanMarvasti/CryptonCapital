@@ -188,7 +188,7 @@ class PublishServer:
                 prob_order_fill += 0.10 * abs_diff
             else:
                 if alt_prob_order_fill>0.8:
-                    other_prob, timetofill = o.probordercompletion2(int(jl['time_seconds']), tradetype != 'buy')
+                    other_prob, _ = o.probordercompletion2(int(jl['time_seconds']), tradetype != 'buy')
                     alt_prob_order_fill = 0.8*alt_prob_order_fill + 0.2*other_prob
 
             marketorderint = 0
