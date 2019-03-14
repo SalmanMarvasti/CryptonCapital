@@ -99,8 +99,8 @@ class modelob:
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([0.99, 1], maxlen=15)
-        self.alo_probs = deque([0.99, 1], maxlen=15)
+        self.blo_probs = deque([0.99, 0.5], maxlen=15)
+        self.alo_probs = deque([0.99, 0.5], maxlen=15)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -113,6 +113,11 @@ class modelob:
         self.buy_sum=deque([], maxlen=4)
         self.sell_sum=deque([], maxlen=4)
         logging.debug('{0} modelling manager initialised'.format(self.tradingpair))
+        self.dic_probs = {}
+
+        for hour in range(0,23):
+            for minute in range(0,60,15):
+                self.dic_probs[hour+minute/60]=(6000,6000)
 
     def vol_at_lob(self, num_bins_used, is_buy):
         num_bins_used = 4
@@ -129,7 +134,7 @@ class modelob:
             return askvol
 
 
-    def fit_gamma(self):
+    def fit_gamma(self, data):
         fit_alpha, fit_loc, fit_beta = stats.gamma.fit(data)
         print(fit_alpha, fit_loc, fit_beta)
         return fit_alpha, fit_loc,fit_beta
@@ -172,25 +177,57 @@ class modellingmanager(modelob):
         print('doane_tick' + str(x) + ' sprd' + str(baspread) + ' fdtick' + str(y))
         return best
 
+    def get_sell_buy_order_rate(self, period_minutes=15):
+        ut = dt.datetime.utcnow()
+        numberofblocks = int(ut.minute/period_minutes)
+        hour_fraction = ut.hour+((numberofblocks+1)*period_minutes/60)
+        sell_order_per_sec, buy_order_per_sec = self.dic_probs.get(hour_fraction)
+        return sell_order_per_sec, buy_order_per_sec
+
+    def prob_next_hour(self, sell_order_per_sec,buy_order_per_sec, timeframe, bins=5): # approximation based on linear
+        sum_bids = self.bids[0:bins, :].sum(axis=0)
+        sum_asks = self.asks[0:bins, :].sum(axis=0)
+        #sell_order_per_sec, buy_order_per_sec = self.dic_probs.get(hour_fraction)
+        if sell_order_per_sec is None:
+            return -1
+        if buy_order_per_sec is None:
+            return -1
+        #prob_blo_live = (sum_bids[1] - sell_order_per_sec)/ (sum_bids[1])
+        #prob_alo_live = (sum_asks[1] - buy_order_per_sec) / (sum_asks[1])
+        combined_prob = (sum_asks[1] + sum_bids[1] - buy_order_per_sec - sell_order_per_sec) / (sum_asks[1]+sum_bids[1])
+        n = timeframe
+        min_time_to_fill = 0
+
+        n_prod = 1
+        minprob =  combined_prob
+        n_prod = np.power(minprob,timeframe)
+        min_time_to_fill = (1+(np.power(minprob, timeframe)*(timeframe-1)) - np.power(minprob, timeframe-1)*timeframe)/(1-minprob)
+        return 1 - n_prod, min_time_to_fill*timeframe/3
+
+
     def probordercompletion2(self, timeframe, isask): # approximation based on linear
         n = timeframe
         if (isask and len(self.alo_probs)==0) or (len(self.blo_probs)==0 and not isask):
             return 0
+        min_time_to_fill = 0
         if isask:
             n_prod = 1
+            minprob =  np.min(self.alo_probs)
             for n in self.alo_probs:
-                n_prod = np.min(self.alo_probs)*n_prod
-                n
+                n_prod = minprob* n_prod
+
             if timeframe>len(self.alo_probs):
                 n_prod = np.power(n_prod,timeframe/len(self.alo_probs))
-            return 1-n_prod
+            min_time_to_fill = (1+(np.power(minprob, timeframe)*(timeframe-1)) - np.power(minprob, timeframe-1)*timeframe)/(1-minprob)
         else:
             n_prod = 1
+            minprob = np.min(self.blo_probs)
             for n in self.blo_probs:
-                n_prod = np.min(self.blo_probs) * n_prod
+                n_prod = minprob * n_prod
             if timeframe > len(self.blo_probs):
                 n_prod = np.power(n_prod, timeframe / len(self.blo_probs))
-            return 1 - n_prod
+            min_time_to_fill = (1 + (np.power(minprob, timeframe) * (timeframe - 1)) - np.power(minprob,timeframe - 1) * timeframe) / (1 - minprob)
+        return 1 - n_prod, min_time_to_fill*timeframe/2
 
     def probordercompletion(self, timeframe, isask): # approximation based on linear
         n = timeframe
@@ -268,8 +305,8 @@ class modellingmanager(modelob):
         except:
             logging.exception("Unhandled Exception")
             raise
-        sum_bids = self.bids.sum(axis=0)
-        sum_asks = self.asks.sum(axis=0)
+        sum_bids = self.bids[0:5, :].sum(axis=0)
+        sum_asks = self.asks[0:5, :].sum(axis=0)
         self.mid = (self.asks[0,0] + self.bids[0,0])*0.5
         orderbook_pricelevels = np.concatenate((self.bids[:,0], self.asks[:,0]))
         self.bins = np.histogram_bin_edges(orderbook_pricelevels, bins='fd')
@@ -281,6 +318,9 @@ class modellingmanager(modelob):
         if self.tick==FIXTIC:
             self.tick = self.choosetick(tick_do/2, tick/3)
         self.bins = np.arange(dfbids['price'].min(), dfasks['price'].max(), self.tick)
+        if self.tradingpair.lower()=='XBTUSD':
+            if self.tick<0.5:
+                self.tick=0.5
         mdf = pd.concat([dfbids, dfasks], ignore_index=True)
         try:
             nfs = convert_df_bins(mdf, self.bins)
@@ -302,13 +342,19 @@ class modellingmanager(modelob):
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
+            bid_prob , btimetofill = self.probordercompletion2(self.forcast_estimate_time, 0)
+            ask_prob, atimetofill = self.probordercompletion2(self.forcast_estimate_time, 1)
             nn = np.array([[current_time * 1000, self.mid, self.vwap, prob_blo_live, prob_alo_live,
+                            bid_prob,ask_prob,
                             self.probordercompletion(self.forcast_estimate_time, 0),
-                            self.probordercompletion(self.forcast_estimate_time, 1)]])
+                            self.probordercompletion(self.forcast_estimate_time, 1), btimetofill, atimetofill]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, fmt=nnfmt, delimiter=',')
             pfile.flush()
             sfile.flush()
+        now = dt.datetime.utcnow()
+        if (now.minute%15==0):
+            self.dic_probs[now.hour+now.minute/60]=(sell_order_per_sec,buy_order_per_sec)
         self.blo_probs.append(prob_blo_live)
         self.alo_probs.append(prob_alo_live)
         self.saveobjecttofile()
@@ -414,7 +460,9 @@ class bitmexmanager(modellingmanager):
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
-            nn = np.array([[current_time * 1000, mid,self.vwap, prob_blo_live, prob_alo_live, self.probordercompletion2(self.forcast_estimate_time ,0), self.probordercompletion2(self.forcast_estimate_time ,1) ,self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1)]])
+            bid_prob , btimetofill = self.probordercompletion2(self.forcast_estimate_time, 0)
+            ask_prob, atimetofill = self.probordercompletion2(self.forcast_estimate_time, 1)
+            nn = np.array([[current_time * 1000, mid,self.vwap, prob_blo_live, prob_alo_live, bid_prob, ask_prob ,self.probordercompletion(self.forcast_estimate_time ,0),  self.probordercompletion(self.forcast_estimate_time ,1)]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, nnfmt, delimiter=',')
             pfile.flush()
@@ -465,7 +513,7 @@ if __name__ == "__main__":
 
 
     if exchange is None:
-        exchange = 'Binance'
+        exchange = 'bitmexws'
         print('setting default exchange '+exchange)
     if name is not None:
         tp.name = name

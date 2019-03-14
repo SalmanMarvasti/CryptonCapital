@@ -171,9 +171,9 @@ class PublishServer:
                 noimpact_vol = mosize*0.5 + 0.5*noimpact_vol
                 #if noimpact_vol<10:
                 #    noimpact_vol = mosize * 0.90 + 0.1*noimpact_vol
-
+            time_in_secs = int(jl['time_seconds'])
             prob_order_fill = o.probordercompletion(int(jl['time_seconds']),tradetype=='buy')
-            alt_prob_order_fill =  o.probordercompletion2(int(jl['time_seconds']),tradetype=='buy')
+            alt_prob_order_fill, timetofill =  o.probordercompletion2(time_in_secs,tradetype=='buy')
             cond_for_adj = buy_int and o.vwap>o.mid
             cond_for_adj = cond_for_adj or buy_int==0 and o.vwap<o.mid
             abs_diff = o.mid - o.vwap
@@ -186,10 +186,9 @@ class PublishServer:
                 logging.info('adjusting probability'+str(abs_diff))
                 alt_prob_order_fill += 0.10 * abs_diff
                 prob_order_fill += 0.10 * abs_diff
-                alt_prob_order_fill +=  0.1*o.probordercompletion2(int(jl['time_seconds']),tradetype!='buy')
             else:
                 if alt_prob_order_fill>0.8:
-                    other_prob = o.probordercompletion2(int(jl['time_seconds']), tradetype != 'buy')
+                    other_prob, timetofill = o.probordercompletion2(int(jl['time_seconds']), tradetype != 'buy')
                     alt_prob_order_fill = 0.8*alt_prob_order_fill + 0.2*other_prob
 
             marketorderint = 0
@@ -240,7 +239,7 @@ class PublishServer:
                     rd = 0.5+random.random()/4
 
 
-            mydict = {'id': jl['id'], 'pred_mid': o.mid, 'vwap': o.vwap, 'valid_for_sec': o.tradewindow_sec*4 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
+            mydict = {'id': jl['id'], 'time_to_fill':timetofill, 'pred_mid': o.mid, 'vwap': o.vwap, 'valid_for_sec': o.tradewindow_sec*5 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill }
             logging.info('publishing'+str(mydict))
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)
@@ -290,7 +289,7 @@ if __name__ == "__main__":
     # mydict = {'id': random.randint(1, 1000), 'pair': 'LTCUSDT', 'type': tradetype, 'targetcost_percent': 0.1,
     #          'exchange': 'Binance', 'tradesize': 1000, 'time_seconds': 500}
     mydict = {'id': random.randint(1, 1000), 'pair': 'XBTUSD', 'type': tradetype, 'targetcost_percent': 0.1,
-              'exchange': 'bitmex', 'tradesize': 1000, 'time_seconds': 400}
+              'exchange': 'bitmex', 'tradesize': 1000, 'time_seconds': 120}
 
     q.put(json.dumps(mydict))
 
