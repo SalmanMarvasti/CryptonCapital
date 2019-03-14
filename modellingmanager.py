@@ -83,6 +83,7 @@ class modelob:
         self.market = acct.market
         self.latestob = {}
         self.tradewindow_sec = 29
+        self.epsi=0.00000000001
 
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
@@ -95,6 +96,7 @@ class modelob:
         if self.market.lower() =='bitmexws':
             self.tradeeurl = 'http://localhost:{port}/users'.format(port=53581)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
+            self.backup_tradeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
 
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
@@ -201,6 +203,8 @@ class modellingmanager(modelob):
         n_prod = 1
         minprob =  combined_prob
         n_prod = np.power(minprob,timeframe)
+        if minprob == 1:
+            minprob==1-self.epsi
         min_time_to_fill = (1+(np.power(minprob, timeframe)*(timeframe-1)) - np.power(minprob, timeframe-1)*timeframe)/(1-minprob)
         return 1 - n_prod, min_time_to_fill*timeframe/3
 
@@ -247,6 +251,42 @@ class modellingmanager(modelob):
 
         self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
         self.asks[:, 3] = np.ones(len(self.asks))
+    def getmarketorders_frombackupapi(self, mid):
+        current_time = time.time()
+        market_order_buy_sum = -1
+        market_order_sell_sum = -1
+        try:
+            with urllib.request.urlopen(self.backup_tradeurl.format(self.tradingpair)) as url:
+                latest_mo = json.loads(url.read().decode())
+                print(latest_mo)
+                # with open('marketorders.json', 'w') as outfile:
+                #     json.dump(latest_mo, outfile)
+                #if quoted['mid']>mid:
+                #    mid = quoted['mid']
+                temporders = np.array( [[  float(x['price']), float(x['amount']), int(x['date']) , 1 if x['price']<mid else 0]for x in latest_mo] )
+                threshold = temporders[:,2]>int((current_time - self.tradewindow_sec-5) * 1000)
+                filtorders = temporders[threshold]
+                self.marketorders = filtorders
+                logging.info('no of market orders'+str(len(self.marketorders)))
+                market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
+                market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
+                return market_order_buy_sum, market_order_sell_sum
+        except urllib.error.HTTPError as detail:
+            logging.exception(self.tradingpair + ':' + str(detail))
+            if detail.errno in (401,500,404):
+                print('exception http')
+            return market_order_buy_sum, market_order_sell_sum
+        except ValueError as ver:
+            logging.exception("ValueError"+str(ver))
+            return market_order_buy_sum, market_order_sell_sum
+        except Exception as eer:
+            logging.exception("unexpected Error")
+            logging.warning('Error, may not recover from this')
+            return market_order_buy_sum, market_order_sell_sum
+        except:
+            logging.exception("Unhandled Exception")
+            raise
+        return market_order_buy_sum, market_order_sell_sum
 
     def getlatestob(self,sfile, obfile, pfile):
         try:
@@ -265,8 +305,10 @@ class modellingmanager(modelob):
 
                 self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
                 self.asks[:,3] = np.ones(len(self.asks))
+                self.mid = (self.asks[0, 0] + self.bids[0, 0]) * 0.5
                 (bvwap, avwap, totala, totalb) = calc_vwap(self.bids, self.asks)
                 self.vwap = (bvwap*totalb+avwap*totala)/(totala+totalb)
+
                 # saveasks = self.asks
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
@@ -277,10 +319,17 @@ class modellingmanager(modelob):
                 temporders = np.array( [[  float(x['price']), float(x['qty']), int(x['time']) , 1 if x['isBuyerMaker'] else 0]for x in latest_mo] )
                 threshold = temporders[:,2]>int((current_time - self.tradewindow_sec-5) * 1000)
                 filtorders = temporders[threshold]
+                buy_sum_back = 0
+                sell_sum_back = 0
+                if len(filtorders)<4:
+                    buy_sum_back, sell_sum_back = self.getmarketorders_frombackupapi(self.mid)
+
                 self.marketorders = filtorders
                 print('no of market orders'+str(len(self.marketorders)))
                 buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
                 sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
+                buy_sum = np.max((buy_sum,buy_sum_back))
+                sell_sum = np.max((sell_sum, sell_sum_back))
                 self.buy_sum.append(buy_sum[1])
                 self.sell_sum.append(sell_sum[1])
                 logging.info('no of market orders'+str(len(self.marketorders)))
@@ -307,7 +356,7 @@ class modellingmanager(modelob):
             raise
         sum_bids = self.bids[0:5, :].sum(axis=0)
         sum_asks = self.asks[0:5, :].sum(axis=0)
-        self.mid = (self.asks[0,0] + self.bids[0,0])*0.5
+
         orderbook_pricelevels = np.concatenate((self.bids[:,0], self.asks[:,0]))
         self.bins = np.histogram_bin_edges(orderbook_pricelevels, bins='fd')
         dfbids = pd.DataFrame({'price':self.bids[:,0] - self.mid, 'amount':self.bids[:,1],})
