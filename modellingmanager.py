@@ -101,8 +101,8 @@ class modelob:
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
         self.marketorders = []
-        self.blo_probs = deque([0.99, 0.5], maxlen=15)
-        self.alo_probs = deque([0.99, 0.5], maxlen=15)
+        self.blo_probs = deque([0.99, 0.9], maxlen=15)
+        self.alo_probs = deque([0.99, 0.9], maxlen=15)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -253,8 +253,8 @@ class modellingmanager(modelob):
         self.asks[:, 3] = np.ones(len(self.asks))
     def getmarketorders_frombackupapi(self, mid):
         current_time = time.time()
-        market_order_buy_sum = -1
-        market_order_sell_sum = -1
+        market_order_buy_sum = [-1, -1]
+        market_order_sell_sum =[-1, -1]
         try:
             with urllib.request.urlopen(self.backup_tradeurl.format(self.tradingpair)) as url:
                 latest_mo = json.loads(url.read().decode())
@@ -267,15 +267,16 @@ class modellingmanager(modelob):
                 threshold = temporders[:,2]>int((current_time - self.tradewindow_sec-5) * 1000)
                 filtorders = temporders[threshold]
                 self.marketorders = filtorders
-                logging.info('no of market orders'+str(len(self.marketorders)))
+                logging.info('no of backup market orders'+str(len(self.marketorders)))
+                print('no of backup market orders' + str(len(self.marketorders)))
                 market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
                 market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
-                return market_order_buy_sum, market_order_sell_sum
+                return market_order_buy_sum[1], market_order_sell_sum[1]
         except urllib.error.HTTPError as detail:
             logging.exception(self.tradingpair + ':' + str(detail))
             if detail.errno in (401,500,404):
                 print('exception http')
-            return market_order_buy_sum, market_order_sell_sum
+            return market_order_buy_sum[1], market_order_sell_sum[1]
         except ValueError as ver:
             logging.exception("ValueError"+str(ver))
             return market_order_buy_sum, market_order_sell_sum
@@ -286,7 +287,7 @@ class modellingmanager(modelob):
         except:
             logging.exception("Unhandled Exception")
             raise
-        return market_order_buy_sum, market_order_sell_sum
+        return market_order_buy_sum[1], market_order_sell_sum[1]
 
     def getlatestob(self,sfile, obfile, pfile):
         try:
@@ -328,10 +329,26 @@ class modellingmanager(modelob):
                 print('no of market orders'+str(len(self.marketorders)))
                 buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
                 sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
-                buy_sum = np.max((buy_sum,buy_sum_back))
-                sell_sum = np.max((sell_sum, sell_sum_back))
-                self.buy_sum.append(buy_sum[1])
-                self.sell_sum.append(sell_sum[1])
+                if len(buy_sum)>0:
+                    buy_sum = buy_sum[1]
+                else:
+                    buy_sum = 0
+
+                if len(sell_sum)>0:
+                    sell_sum = sell_sum[1]
+                else:
+                    sell_sum = 0
+
+                # if no trades on one side assume at least half as many as other side will arrive in near future based on back tests
+                if buy_sum==0:
+                    buy_sum = sell_sum*0.5
+                if sell_sum==0:
+                    sell_sum = buy_sum*0.5
+                if buy_sum_back!=0:
+                    buy_sum = np.max((buy_sum,buy_sum_back))
+                    sell_sum = np.max((sell_sum, sell_sum_back))
+                self.buy_sum.append(buy_sum)
+                self.sell_sum.append(sell_sum)
                 logging.info('no of market orders'+str(len(self.marketorders)))
                 #market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
                 #market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
@@ -367,7 +384,7 @@ class modellingmanager(modelob):
         if self.tick==FIXTIC:
             self.tick = self.choosetick(tick_do/2, tick/3)
         self.bins = np.arange(dfbids['price'].min(), dfasks['price'].max(), self.tick)
-        if self.tradingpair.lower()=='XBTUSD':
+        if self.tradingpair.upper()=='XBTUSD':
             if self.tick<0.5:
                 self.tick=0.5
         mdf = pd.concat([dfbids, dfasks], ignore_index=True)
@@ -377,7 +394,6 @@ class modellingmanager(modelob):
         except Exception as e:
             print(e)
         self.df = nfs
-
         sell_order_per_sec = sell_sum/self.tradewindow_sec
         buy_order_per_sec = buy_sum/ self.tradewindow_sec
 
