@@ -97,6 +97,7 @@ class modelob:
             self.tradeeurl = 'http://localhost:{port}/users'.format(port=53581)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.backup_tradeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
+            self.tradewindow_sec = 25  #
 
         # .redis = connredis('redis.pinksphere.com')
         self.bins = []
@@ -217,21 +218,27 @@ class modellingmanager(modelob):
         if isask:
             n_prod = 1
             minprob =  np.min(self.alo_probs)
+            minprobtime = np.mean(self.alo_probs)
+            if minprob == 1:
+                minprob == 1 - self.epsi
             for n in self.alo_probs:
                 n_prod = minprob* n_prod
 
             if timeframe>len(self.alo_probs):
                 n_prod = np.power(n_prod,timeframe/len(self.alo_probs))
-            min_time_to_fill = (1+(np.power(minprob, timeframe)*(timeframe-1)) - np.power(minprob, timeframe-1)*timeframe)/(1-minprob)
+            min_time_to_fill = (1+(np.power(minprobtime, timeframe)*(timeframe-1)) - np.power(minprobtime, timeframe-1)*timeframe)/(1-minprobtime)
         else:
             n_prod = 1
             minprob = np.min(self.blo_probs)
+            minprobtime = np.mean(self.blo_probs)
+            if minprob == 1:
+                minprob == 1 - self.epsi
             for n in self.blo_probs:
                 n_prod = minprob * n_prod
             if timeframe > len(self.blo_probs):
                 n_prod = np.power(n_prod, timeframe / len(self.blo_probs))
-            min_time_to_fill = (1 + (np.power(minprob, timeframe) * (timeframe - 1)) - np.power(minprob,timeframe - 1) * timeframe) / (1 - minprob)
-        return 1 - n_prod, min_time_to_fill*timeframe/2
+            min_time_to_fill = (1 + (np.power(minprobtime, timeframe) * (timeframe - 1)) - np.power(minprobtime, timeframe - 1) * timeframe) / (1-minprobtime)
+        return 1 - n_prod, min_time_to_fill*timeframe
 
     def probordercompletion(self, timeframe, isask): # approximation based on linear
         n = timeframe
@@ -341,10 +348,10 @@ class modellingmanager(modelob):
 
                 # if no trades on one side assume at least half as many as other side will arrive in near future based on back tests
                 if buy_sum==0:
-                    buy_sum = sell_sum*0.5
+                    buy_sum = sell_sum*0.3
                 if sell_sum==0:
-                    sell_sum = buy_sum*0.5
-                if buy_sum_back!=0:
+                    sell_sum = buy_sum*0.3
+                if buy_sum_back!=0 or sell_sum_back!=0:
                     buy_sum = np.max((buy_sum,buy_sum_back))
                     sell_sum = np.max((sell_sum, sell_sum_back))
                 self.buy_sum.append(buy_sum)
