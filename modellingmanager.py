@@ -74,6 +74,15 @@ def convert_to_ndarray(k, ctime, isAsk=0):
 
 FIXTIC = 0.015625
 
+class prediction_checker:
+    def __init__(self, acct):
+        self.predlist = []
+        self.limitlist = []
+    def add_pred(self, validtill_timestamp, price, limit_price=0, limit_quantity=0):
+        self.predlist.append((validtill_timestamp, price))
+        self.limitlist.append((limit_price, limit_quantity))
+
+
 class modelob:
     def __init__(self, acct):
         global r
@@ -219,6 +228,7 @@ class modellingmanager(modelob):
             n_prod = 1
             minprob =  np.min(self.alo_probs)
             minprobtime = np.mean(self.alo_probs)
+            maxprobtime = np.max(self.alo_probs)
             if minprob == 1:
                 minprob == 1 - self.epsi
             for n in self.alo_probs:
@@ -226,19 +236,22 @@ class modellingmanager(modelob):
 
             if timeframe>len(self.alo_probs):
                 n_prod = np.power(n_prod,timeframe/len(self.alo_probs))
-            min_time_to_fill = (1+(np.power(minprobtime, timeframe)*(timeframe-1)) - np.power(minprobtime, timeframe-1)*timeframe)/(1-minprobtime)
+                # (np.power(minprobtime, timeframe)*(timeframe-1)) - np.power(minprobtime, timeframe-1)*timeframe)
+                min_time_to_fill = 1/(1-minprobtime)
         else:
             n_prod = 1
             minprob = np.min(self.blo_probs)
             minprobtime = np.mean(self.blo_probs)
+            maxprobtime = np.max(self.blo_probs)
             if minprob == 1:
                 minprob == 1 - self.epsi
             for n in self.blo_probs:
                 n_prod = minprob * n_prod
             if timeframe > len(self.blo_probs):
                 n_prod = np.power(n_prod, timeframe / len(self.blo_probs))
-            min_time_to_fill = (1 + (np.power(minprobtime, timeframe) * (timeframe - 1)) - np.power(minprobtime, timeframe - 1) * timeframe) / (1-minprobtime)
-        return 1 - n_prod, min_time_to_fill*timeframe
+                # (np.power(minprobtime, timeframe)*(timeframe-1)) - np.power(minprobtime, timeframe-1)*timeframe)
+            min_time_to_fill = 1 / (1-minprobtime)
+        return 1 - n_prod, [min_time_to_fill,1/(1-maxprobtime)]
 
     def probordercompletion(self, timeframe, isask): # approximation based on linear
         n = timeframe
@@ -419,7 +432,7 @@ class modellingmanager(modelob):
             nn = np.array([[current_time * 1000, self.mid, self.vwap, prob_blo_live, prob_alo_live,
                             bid_prob,ask_prob,
                             self.probordercompletion(self.forcast_estimate_time, 0),
-                            self.probordercompletion(self.forcast_estimate_time, 1), btimetofill, atimetofill]])
+                            self.probordercompletion(self.forcast_estimate_time, 1), btimetofill[0], atimetofill[0]]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, fmt=nnfmt, delimiter=',')
             pfile.flush()
