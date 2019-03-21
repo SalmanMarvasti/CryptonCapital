@@ -196,6 +196,10 @@ class modellingmanager(modelob):
         sell_order_per_sec, buy_order_per_sec = self.dic_probs.get(hour_fraction)
         return sell_order_per_sec, buy_order_per_sec
 
+    def geo_mean_overflow(self, iterable):
+        a = np.log(iterable)
+        return np.exp(a.sum() / len(a))
+
     def prob_next_hour(self, sell_order_per_sec,buy_order_per_sec, timeframe, bins=5): # approximation based on linear
         sum_bids = self.bids[0:bins, :].sum(axis=0)
         sum_asks = self.asks[0:bins, :].sum(axis=0)
@@ -258,9 +262,9 @@ class modellingmanager(modelob):
         if (isask and len(self.alo_probs)==0) or (len(self.blo_probs)==0 and not isask):
             return 0
         if isask:
-            return (1-np.power(np.mean(self.alo_probs),n))  # here
+            return (1-np.power(self.geo_mean_overflow(self.alo_probs),n))  # here
         else:
-            return (1-np.power(np.mean(self.blo_probs),n))
+            return (1-np.power(self.geo_mean_overflow(self.blo_probs),n))
 
 
     def set_lob_data(self, current_time, latest_ob ):
