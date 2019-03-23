@@ -6,7 +6,7 @@ import threading
 import logging
 import random
 import queue
-from modellingmanager import create_model, modellingmanager, bitmexmanager
+from modellingmanager import create_model, modellingmanager, bitmexmanager, prediction_checker
 import numpy as np
 import datetime
 credentials = namedtuple('credentials', ('api', 'secret', 'endpoint'))
@@ -93,7 +93,7 @@ def try_command(f, *args, **kwargs):
 
 
 def connredis(h):# if r unassigned defaults to local host
-    #r = redis.StrictRedis(host='ab722e68624e211e9b8160e2a8d9724d-949947629.us-east-1.elb.amazonaws.com',password='Test@123', port=6379, db=0)
+    r = redis.StrictRedis(host='ab722e68624e211e9b8160e2a8d9724d-949947629.us-east-1.elb.amazonaws.com',password='Test@123', port=6379, db=0)
     # redis.StrictRedis(host=h, password='Test@123', port=6379, db=0)
     return r
 
@@ -242,7 +242,7 @@ class PublishServer:
                     rd = 0.5+random.random()/4
 
 
-            mydict = {'id': jl['id'], 'time_to_fill':timetofill, 'cur_mid': o.mid, 'vwap': o.vwap, 'valid_for_sec': o.tradewindow_sec*5 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill,'pred_price':o.price_prediction}
+            mydict = {'id': jl['id'], 'time_to_fill':timetofill, 'cur_mid': o.mid, 'vwap': o.vwap, 'valid_for_sec': o.tradewindow_sec*5 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill,'pred_price':o.price_prediction, 'prediction_stat':[o.stats.number_of_predictions, o.stats.number_correct]}
             logging.info('publishing'+str(mydict))
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)

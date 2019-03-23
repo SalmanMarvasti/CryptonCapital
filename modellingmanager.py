@@ -81,19 +81,30 @@ class prediction_checker:
         self.number_correct = 0
         self.time_start = dt.datetime.utcnow().timestamp()
         self.time_end = 0
-    def update(self, price, timestamp, tick=0.5):
+        self.prev_mid= 0
+        self.tick = 0.5
+        self.dollar_gain = 0
+    def update(self, price, timestamp, tick):
         newlist = []
+        self.tick=tick
         for a in self.predlist:
             if timestamp<a[0]:
-                if(abs(price-a[1])<tick):
+                if abs(price-a[1])<tick or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
                     self.number_correct+=1
+                    self.dollar_gain+=abs(a[2])
                 else:
                     newlist.append(a)
+            else:
+                self.dollar_gain -= abs(a[2])
         self.predlist = newlist
+
     def __len__(self):
         return self.number_of_predictions
-    def add_pred(self, validtill_timestamp, price):
-        self.predlist.append((validtill_timestamp, price))
+    def add_pred(self, validtill_timestamp, price, diff=0):
+        if len(self.predlist)>0 and abs(price-self.predlist[-1][1])<(self.tick*0.25):
+            print('ignoring duplicate prediction')
+            return
+        self.predlist.append((validtill_timestamp, price, diff))
         self.number_of_predictions+=1
         if validtill_timestamp>self.time_end:
             self.time_end=validtill_timestamp
@@ -198,14 +209,13 @@ class modellingmanager(modelob):
 
     def choosetick(self, x: float, y : float):
 
-        baspread = (self.asks[0,0] - self.bids[0,0])*3
+        baspread = (self.asks[0,0] - self.bids[0,0])
         best=baspread
         if (x<baspread):
             best = x
         if y<baspread:
             best = y
 
-        print('doane_tick' + str(x) + ' sprd' + str(baspread) + ' fdtick' + str(y))
         return best
 
     def get_sell_buy_order_rate(self, period_minutes=15):
@@ -450,7 +460,7 @@ class modellingmanager(modelob):
             logging.info(self.dic_probs)
         round_min = int(now.minute / 15) * 15 + 15
         round_min = now.hour + round_min/60
-        self.stats.update(now.timestamp(), self.mid)
+        self.stats.update(now.timestamp(), self.mid, self.tick*0.8)
 
         past_prob_blo_live = 0
         past_prob_alo_live = 0
@@ -479,11 +489,11 @@ class modellingmanager(modelob):
             if bid_prob>ask_prob+thresh:
                 print('price falling')
                 self.price_prediction = self.down_price
-                self.stats.add_pred(current_time + 1500, self.price_prediction)
+                self.stats.add_pred(current_time + 1500, self.price_prediction, self.price_prediction-self.mid)
             if ask_prob>bid_prob+thresh:
                 print('price rising')
                 self.price_prediction = self.up_price
-                self.stats.add_pred(current_time + 1500, self.price_prediction)
+                self.stats.add_pred(current_time + 1500, self.price_prediction, self.price_prediction-self.mid)
             self.confidence = abs(ask_prob-bid_prob)
 
 
