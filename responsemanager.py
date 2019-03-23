@@ -242,7 +242,7 @@ class PublishServer:
                     rd = 0.5+random.random()/4
 
 
-            mydict = {'id': jl['id'], 'time_to_fill':timetofill, 'cur_mid': o.mid, 'vwap': o.vwap, 'valid_for_sec': o.tradewindow_sec*5 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill,'pred_price':o.price_prediction, 'prediction_stat':[o.stats.number_of_predictions, o.stats.number_correct]}
+            mydict = {'id': jl['id'], 'time_to_fill':timetofill, 'cur_mid': o.mid, 'vwap': o.vwap, 'valid_for_sec': o.tradewindow_sec*5 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)], 'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill,'pred_price':o.price_prediction, 'prediction_stat':[o.stats.number_of_predictions, o.stats.number_correct, o.stats.dollar_gain]}
             logging.info('publishing'+str(mydict))
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)

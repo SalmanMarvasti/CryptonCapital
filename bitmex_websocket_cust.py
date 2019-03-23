@@ -26,7 +26,7 @@ class BitMEXWebsocket:
 
     def __init__(self, endpoint, symbol, api_key=None, api_secret=None):
         '''Connect to the websocket and initialize data stores.'''
-        self.logger =  logging.basicConfig(level=logging.DEBUG,
+        self.logger =  logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                         datefmt='%m-%d %H:%M',
                         filename='./bitmexWScust.log',

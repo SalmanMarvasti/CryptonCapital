@@ -324,7 +324,7 @@ class modellingmanager(modelob):
                 print('no of backup market orders' + str(len(self.marketorders)))
                 market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
                 market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
-                return market_order_buy_sum[1], market_order_sell_sum[1]
+                return market_order_buy_sum[1], market_order_sell_sum[1], filtorders
         except urllib.error.HTTPError as detail:
             logging.info(self.tradingpair + ':')
             logging.exception( str(detail))
@@ -378,11 +378,12 @@ class modellingmanager(modelob):
                 filtorders = temporders[threshold]
                 buy_sum_back = 0
                 sell_sum_back = 0
+                print('no of market orders' + str(len(filtorders)))
                 if len(filtorders)<4:
-                    buy_sum_back, sell_sum_back = self.getmarketorders_frombackupapi(self.mid)
+                    buy_sum_back, sell_sum_back, filtorders = self.getmarketorders_frombackupapi(self.mid)
 
                 self.marketorders = filtorders
-                print('no of market orders'+str(len(self.marketorders)))
+
                 buy_sum = filtorders[filtorders[:,-1]==0].sum(axis=0)
                 sell_sum = filtorders[filtorders[:,-1]==1].sum(axis=0)
                 if len(buy_sum)>0:

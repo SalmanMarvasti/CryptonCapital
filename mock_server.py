@@ -46,6 +46,8 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         body = ws.recent_trades()
         ltrades = self.createListFromTrades(body)
         s = json.dumps(ltrades)
+        if len(ltrades) != 0:
+            print(ltrades[-1])
 
         #response.write(s)
 
