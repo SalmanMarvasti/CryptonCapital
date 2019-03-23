@@ -75,12 +75,28 @@ def convert_to_ndarray(k, ctime, isAsk=0):
 FIXTIC = 0.015625
 
 class prediction_checker:
-    def __init__(self, acct):
+    def __init__(self):
         self.predlist = []
-        self.limitlist = []
-    def add_pred(self, validtill_timestamp, price, limit_price=0, limit_quantity=0):
+        self.number_of_predictions = 0
+        self.number_correct = 0
+        self.time_start = dt.datetime.utcnow().timestamp()
+        self.time_end = 0
+    def update(self, price, timestamp, tick=0.5):
+        newlist = []
+        for a in self.predlist:
+            if timestamp<a[0]:
+                if(abs(price-a[1])<tick):
+                    self.number_correct+=1
+                else:
+                    newlist.append(a)
+        self.predlist = newlist
+    def __len__(self):
+        return self.number_of_predictions
+    def add_pred(self, validtill_timestamp, price):
         self.predlist.append((validtill_timestamp, price))
-        self.limitlist.append((limit_price, limit_quantity))
+        self.number_of_predictions+=1
+        if validtill_timestamp>self.time_end:
+            self.time_end=validtill_timestamp
 
 
 class modelob:
@@ -93,6 +109,7 @@ class modelob:
         self.latestob = {}
         self.tradewindow_sec = 29
         self.epsi=0.00000000001
+        self.stats = prediction_checker()
 
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
@@ -113,6 +130,8 @@ class modelob:
         self.marketorders = []
         self.blo_probs = deque([0.99, 0.9], maxlen=15)
         self.alo_probs = deque([0.99, 0.9], maxlen=15)
+        self.bids_hist = deque([0.99, 0.9], maxlen=15)
+        self.asks_hist = deque([0.99, 0.9], maxlen=15)
         self.mid = deque([], maxlen=5)
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
@@ -129,7 +148,7 @@ class modelob:
 
         for hour in range(0,23):
             for minute in range(0,60,15):
-                self.dic_probs[hour+minute/60]=(6000,6000)
+                self.dic_probs[hour+minute/60]=(0,0)
 
     def vol_at_lob(self, num_bins_used, is_buy):
         num_bins_used = 4
@@ -297,7 +316,8 @@ class modellingmanager(modelob):
                 market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
                 return market_order_buy_sum[1], market_order_sell_sum[1]
         except urllib.error.HTTPError as detail:
-            logging.exception(self.tradingpair + ':' + str(detail))
+            logging.info(self.tradingpair + ':')
+            logging.exception( str(detail))
             if detail.errno in (401,500,404):
                 print('exception http')
             return market_order_buy_sum[1], market_order_sell_sum[1]
@@ -316,7 +336,8 @@ class modellingmanager(modelob):
     def getlatestob(self,sfile, obfile, pfile):
         try:
             with urllib.request.urlopen(self.updateurl.format(self.tradingpair)) as url:
-                current_time = time.time()
+                current_time = dt.datetime.utcnow().timestamp()
+
                 latest_ob= json.loads(url.read().decode())
                 # with open('limitorders.json', 'w') as outfile:
                 #     json.dump(latest_ob, outfile)
@@ -333,7 +354,8 @@ class modellingmanager(modelob):
                 self.mid = (self.asks[0, 0] + self.bids[0, 0]) * 0.5
                 (bvwap, avwap, totala, totalb) = calc_vwap(self.bids, self.asks)
                 self.vwap = (bvwap*totalb+avwap*totala)/(totala+totalb)
-
+                self.up_price = avwap
+                self.down_price = bvwap
                 # saveasks = self.asks
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
@@ -380,6 +402,7 @@ class modellingmanager(modelob):
                 sell_sum = np.mean(self.sell_sum)
 
         except urllib.error.HTTPError as detail:
+            logging.info('HTTPERROR'+ self.tradingpair)
             logging.exception(self.tradingpair + ':' + str(detail))
             if detail.errno in (401,500,404):
                 print('exception http')
@@ -393,6 +416,7 @@ class modellingmanager(modelob):
             print(str(eer))
             return
         except:
+            logging.info('very strange exception')
             logging.exception("Unhandled Exception")
             raise
         sum_bids = self.bids[0:5, :].sum(axis=0)
@@ -419,8 +443,23 @@ class modellingmanager(modelob):
             print(e)
         self.df = nfs
         sell_order_per_sec = sell_sum/self.tradewindow_sec
-        buy_order_per_sec = buy_sum/ self.tradewindow_sec
+        buy_order_per_sec = buy_sum/self.tradewindow_sec
+        now = dt.datetime.utcnow()
+        if (now.minute%15==0):
+            self.dic_probs[now.hour+now.minute/60]=(sell_order_per_sec,buy_order_per_sec)
+            logging.info(self.dic_probs)
+        round_min = int(now.minute / 15) * 15 + 15
+        round_min = now.hour + round_min/60
+        self.stats.update(now.timestamp(), self.mid)
 
+        past_prob_blo_live = 0
+        past_prob_alo_live = 0
+        if round_min in self.dic_probs:
+            past_order_per_sec = self.dic_probs[round_min]
+            past_prob_blo_live = (sum_bids[1] - past_order_per_sec[0]) / (sum_bids[1])
+            past_prob_alo_live = (sum_asks[1] - past_order_per_sec[1]) / (sum_asks[1])
+            if(past_order_per_sec[0]>0):
+                print('past order is greater than zero')
         prob_blo_live = (sum_bids[1]-sell_order_per_sec)/(sum_bids[1])
         prob_alo_live = (sum_asks[1] - buy_order_per_sec) / (sum_asks[1])
         floatfmt = '%30.9f'
@@ -433,17 +472,28 @@ class modellingmanager(modelob):
             np.savetxt(obfile, self.asks, fmt=mfmt, delimiter=',')
             bid_prob , btimetofill = self.probordercompletion2(self.forcast_estimate_time, 0)
             ask_prob, atimetofill = self.probordercompletion2(self.forcast_estimate_time, 1)
-            nn = np.array([[current_time * 1000, self.mid, self.vwap, prob_blo_live, prob_alo_live,
-                            bid_prob,ask_prob,
-                            self.probordercompletion(self.forcast_estimate_time, 0),
-                            self.probordercompletion(self.forcast_estimate_time, 1), btimetofill[0], atimetofill[0]]])
+            bid_gmean = self.probordercompletion(self.forcast_estimate_time, 0)
+            ask_gmean = self.probordercompletion(self.forcast_estimate_time, 1)
+            thresh = 0.18
+            self.price_prediction = self.mid
+            if bid_prob>ask_prob+thresh:
+                print('price falling')
+                self.price_prediction = self.down_price
+                self.stats.add_pred(current_time + 1500, self.price_prediction)
+            if ask_prob>bid_prob+thresh:
+                print('price rising')
+                self.price_prediction = self.up_price
+                self.stats.add_pred(current_time + 1500, self.price_prediction)
+            self.confidence = abs(ask_prob-bid_prob)
+
+
+            nn = np.array([[current_time * 1000, self.mid, past_prob_blo_live, prob_blo_live, prob_alo_live,
+                            bid_prob,ask_prob,bid_gmean,ask_gmean, btimetofill[0], atimetofill[0],self.price_prediction]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, fmt=nnfmt, delimiter=',')
             pfile.flush()
             sfile.flush()
-        now = dt.datetime.utcnow()
-        if (now.minute%15==0):
-            self.dic_probs[now.hour+now.minute/60]=(sell_order_per_sec,buy_order_per_sec)
+
         self.blo_probs.append(prob_blo_live)
         self.alo_probs.append(prob_alo_live)
         self.saveobjecttofile()
@@ -588,13 +638,12 @@ if __name__ == "__main__":
         if args.testmode=='yes':
             testmode = True
         if args.testmode == 'no' or args.testmode=='false':
-            testmode = False
+            print('sorry currently do not support non testmode')
         if name is not None:
             print('tradingpair:' + str(name)+' exchange:'+str(exchange))
     except Exception as e:
         print("type error: " + str(e))
         name = 'EOSUSDT'
-    # tp.secret = "Test@123"
     if not testmode:
         ws = getBitmexWs()
     with mock.patch('bitmexwebsock.BitMEXWebsocket') as MockBitmexgetWs:
@@ -623,11 +672,12 @@ if __name__ == "__main__":
     f = open(prefix+str(tp.name)+'marketorders4.csv', 'ab')
     fob = open(prefix+str(tp.name)+'orderbooks4.csv', 'ab')
     l = task.LoopingCall(cr.getlatestob,f,fob,fp)
-    l.start(cr.tradewindow_sec-5)  # call every tradewindow_sec seconds
+    l.start(cr.tradewindow_sec)  # call every tradewindow_sec seconds
 
     # l.stop() will stop the looping calls
     reactor.run()
     # blo, slo = cr.getlatestob(f)
+    logging.info('reactor completed')
     print('reactor completed')
     fp.close()
     f.close()
