@@ -110,7 +110,7 @@ class BitMEXWebsocket:
 
     #
     # End Public Methods
-    #
+    #__connect
 
     def __connect(self, wsURL, symbol):
         '''Connect to the websocket in a thread.'''
@@ -258,7 +258,10 @@ class BitMEXWebsocket:
 
     def __on_close(self, ws):
         '''Called on websocket close.'''
-        self.logger.info('Websocket Closed')
+        self.logger.info('Websocket Closed, reconnecting')
+        sleep(5)
+        self.__connect(self.__get_url(),self.symbol);
+
 
 
 # Utility method for finding an item in the store.
