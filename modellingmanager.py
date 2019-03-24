@@ -75,6 +75,7 @@ def convert_to_ndarray(k, ctime, isAsk=0):
 FIXTIC = 0.015625
 
 class prediction_checker:
+    FIXED_OFFSET = 1800
     def __init__(self):
         self.predlist = []
         self.number_of_predictions = 0
@@ -84,14 +85,28 @@ class prediction_checker:
         self.prev_mid= 0
         self.tick = 0.5
         self.dollar_gain = 0
+        #self.FIXED_OFFSET = 2000
+        self.filledlist = []
+
+    def get_average_time_to_fill(self):
+        total = 0
+        if len(self.filledlist)==0:
+            return total
+        for x in self.filledlist:
+            total+=x[1]
+        return total/len(self.filledlist)
+
     def update(self, price, timestamp, tick):
         newlist = []
+        if price>10000:
+            raise Exception('invalid price')
         self.tick=tick
         for a in self.predlist:
             if timestamp<a[0]:
                 if abs(price-a[1])<tick or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
                     self.number_correct+=1
                     self.dollar_gain+=abs(a[2])
+                    self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET))
                 else:
                     newlist.append(a)
             else:
@@ -101,7 +116,7 @@ class prediction_checker:
     def __len__(self):
         return self.number_of_predictions
     def add_pred(self, validtill_timestamp, price, diff=0):
-        if len(self.predlist)>0 and abs(price-self.predlist[-1][1])<(self.tick*0.25):
+        if len(self.predlist)>0 and abs(price-self.predlist[-1][1])<(self.tick*0.5):
             print('ignoring duplicate prediction')
             return
         self.predlist.append((validtill_timestamp, price, diff))
@@ -442,16 +457,21 @@ class modellingmanager(modelob):
         tick_do = self.bins[1] - self.bins[0]
         if self.tick==FIXTIC:
             self.tick = self.choosetick(tick_do/2, tick/3)
-        self.bins = np.arange(dfbids['price'].min(), dfasks['price'].max(), self.tick)
+        self.bins = np.arange(dfbids['price'].min(), dfasks['price'].max(), self.tick*2)
         if self.tradingpair.upper()=='XBTUSD':
             if self.tick<0.5:
                 self.tick=0.5
         mdf = pd.concat([dfbids, dfasks], ignore_index=True)
         try:
             nfs = convert_df_bins(mdf, self.bins)
+            nfs.index.name='priceindex'
             print(nfs)
+
+            # bid,ask, totalask, totalbid = calc_vwap(nfs.loc[nfs.price<0].sort_index(0, ascending=False).values, nfs.loc[nfs.price>0].values)
+            # self.down_price = self.mid +bid
+            # self.up_price = self.mid + ask
         except Exception as e:
-            print(e)
+            print('Exception NFS' + e)
         self.df = nfs
         sell_order_per_sec = sell_sum/self.tradewindow_sec
         buy_order_per_sec = buy_sum/self.tradewindow_sec
@@ -461,7 +481,7 @@ class modellingmanager(modelob):
             logging.info(self.dic_probs)
         round_min = int(now.minute / 15) * 15 + 15
         round_min = now.hour + round_min/60
-        self.stats.update(now.timestamp(), self.mid, self.tick*0.8)
+        self.stats.update(self.mid,now.timestamp(), self.tick*0.8)
 
         past_prob_blo_live = 0
         past_prob_alo_live = 0
@@ -490,11 +510,11 @@ class modellingmanager(modelob):
             if bid_prob>ask_prob+thresh:
                 print('price falling')
                 self.price_prediction = self.down_price
-                self.stats.add_pred(current_time + 1500, self.price_prediction, self.price_prediction-self.mid)
+                self.stats.add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction, self.price_prediction-self.mid)
             if ask_prob>bid_prob+thresh:
                 print('price rising')
                 self.price_prediction = self.up_price
-                self.stats.add_pred(current_time + 1500, self.price_prediction, self.price_prediction-self.mid)
+                self.stats.add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction, self.price_prediction-self.mid)
             self.confidence = abs(ask_prob-bid_prob)
 
 
@@ -506,6 +526,8 @@ class modellingmanager(modelob):
             sfile.flush()
 
         self.blo_probs.append(prob_blo_live)
+        self.bids_hist.append(self.bids)
+        self.asks_hist.appendleft(self.asks)
         self.alo_probs.append(prob_alo_live)
         self.saveobjecttofile()
         return
