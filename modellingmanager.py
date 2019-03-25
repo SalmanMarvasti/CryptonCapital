@@ -41,7 +41,7 @@ def diff_df_on_price(tdf1, tdf2):
     return tdf1
 
 def calc_vwap(bids, asks):
-    R = 6# bids.shape[0]
+    R = 8# bids.shape[0]
     totalb = np.sum(bids[0:R,1])
     totala = np.sum(asks[0:R,1])
     bid_vwap=0
