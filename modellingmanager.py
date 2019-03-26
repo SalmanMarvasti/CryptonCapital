@@ -6,9 +6,8 @@ from collections import namedtuple, deque
 import datetime as dt
 import time
 from twisted.internet import task
-from twisted.internet import reactor
 tp = namedtuple('tradingpair', ('name', 'datetime', 'market'))
-from twisted.internet import protocol
+
 from twisted.internet import reactor
 import os
 import time
@@ -40,13 +39,12 @@ def diff_df_on_price(tdf1, tdf2):
     tdf1['change'] =  res['amount_y'] - res['amount_x']
     return tdf1
 
-def calc_vwap(bids, asks):
-    R = 6# bids.shape[0]
-    totalb = np.sum(bids[0:R,1])
-    totala = np.sum(asks[0:R,1])
+def calc_vwap(bids, asks, Rbins=7):
+    totalb = np.sum(bids[0:Rbins,1])
+    totala = np.sum(asks[0:Rbins,1])
     bid_vwap=0
     ask_vwap=0
-    for r in range(0, R):
+    for r in range(0, Rbins):
         bid_vwap += bids[r][0]*bids[r][1]
         ask_vwap += asks[r][0]*asks[r][1]
     return (bid_vwap/totalb, ask_vwap/totala, totala, totalb)
@@ -76,10 +74,11 @@ FIXTIC = 0.015625
 
 class prediction_checker:
     FIXED_OFFSET = 1800
-    def __init__(self):
+    def __init__(self, thresh=0.2):
         self.predlist = []
-        self.number_of_predictions = 0
+        self.number_of_predictions = 1 # prevent divide by zero erros
         self.number_correct = 0
+        self.number_stopped = 0
         self.time_start = dt.datetime.utcnow().timestamp()
         self.time_end = 0
         self.prev_mid= 0
@@ -87,14 +86,17 @@ class prediction_checker:
         self.dollar_gain = 0
         #self.FIXED_OFFSET = 2000
         self.filledlist = []
+        self.thresh=thresh
 
     def get_average_time_to_fill(self):
         total = 0
         if len(self.filledlist)==0:
-            return total
+            return (total, 0)
+        confidence = 0
         for x in self.filledlist:
             total+=x[1]
-        return total/len(self.filledlist)
+            confidence+=x[2]
+        return (total/len(self.filledlist), confidence/len(self.filledlist))
 
     def update(self, price, timestamp, tick):
         newlist = []
@@ -103,23 +105,29 @@ class prediction_checker:
         self.tick=tick
         for a in self.predlist:
             if timestamp<a[0]:
-                if abs(price-a[1])<tick or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
+                if abs(price-a[1])<tick*0.5 or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
                     self.number_correct+=1
-                    self.dollar_gain+=abs(a[2])
-                    self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET))
+                    self.dollar_gain+=max(abs(a[2]),abs(price-a[1])-self.tick)
+                    self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET, a[3]))
                 else:
-                    newlist.append(a)
+                    if (abs(price-a[1])>a[2]+2*self.tick):
+                        logging.info('order stopped')
+                        self.dollar_gain -= abs(a[2]+2*self.tick)
+                        self.number_stopped += 1
+                    else: # keep order for now
+                        newlist.append(a)
             else:
+                print('order expired')
                 self.dollar_gain -= abs(a[2])
         self.predlist = newlist
 
     def __len__(self):
         return self.number_of_predictions
-    def add_pred(self, validtill_timestamp, price, diff=0):
-        if len(self.predlist)>0 and abs(price-self.predlist[-1][1])<(self.tick*0.5):
+    def add_pred(self, validtill_timestamp, predicted_price, price_diff=0, confidence=0):
+        if len(self.predlist)>0 and abs(predicted_price - self.predlist[-1][1])<(self.tick * 0.5):
             print('ignoring duplicate prediction')
             return
-        self.predlist.append((validtill_timestamp, price, diff))
+        self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence))
         self.number_of_predictions+=1
         if validtill_timestamp>self.time_end:
             self.time_end=validtill_timestamp
@@ -130,19 +138,22 @@ class modelob:
         global r
         self.tradingpair = acct.name
 
-        self.datetime = dt.datetime.now()
+        self.datetime = dt.datetime.utcnow()
         self.market = acct.market
         self.latestob = {}
         self.tradewindow_sec = 29
         self.epsi=0.00000000001
-        self.stats = prediction_checker()
+        self.stats = [prediction_checker(0.2), prediction_checker(0.3), prediction_checker(0.4), prediction_checker(0.5)]
 
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
             self.tradeeurl = "https://api.binance.com/api/v1/trades?symbol={0}"
+            self.backup_tradeurl = "https://api.binance.com/api/v1/trades?symbol={0}"
+
         if self.market in ('bitmex', 'BitMex', 'Bitmex'): #'http://localhost:{port}/users'.format(port=53581)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.tradeeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
+            self.backup_tradeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
             #
             self.tradewindow_sec = 25 # bitmex trade window must be lower as buyer or seller is not specified
         if self.market.lower() =='bitmexws':
@@ -476,12 +487,21 @@ class modellingmanager(modelob):
         sell_order_per_sec = sell_sum/self.tradewindow_sec
         buy_order_per_sec = buy_sum/self.tradewindow_sec
         now = dt.datetime.utcnow()
+        if(now.timestamp()-self.datetime.timestamp()>800): # at least 10 min passed
+            med_bids = np.median(self.bids_hist,axis=0)
+            med_asks = np.median(self.asks_hist, axis=0)
+            med_bids[0:7,:] = self.bids[0:7,:]
+            med_asks[0:7, :] = self.asks[0:7,:]
+            bvwap, avwap, totala, totalb = calc_vwap(med_bids, med_asks, 10)
+            self.up_price = avwap
+            self.down_price = bvwap
         if (now.minute%15==0):
             self.dic_probs[now.hour+now.minute/60]=(sell_order_per_sec,buy_order_per_sec)
             logging.info(self.dic_probs)
         round_min = int(now.minute / 15) * 15 + 15
         round_min = now.hour + round_min/60
-        self.stats.update(self.mid,now.timestamp(), self.tick*0.8)
+        for st in self.stats:
+            st.update(self.mid,now.timestamp(), self.tick)
 
         past_prob_blo_live = 0
         past_prob_alo_live = 0
@@ -505,18 +525,24 @@ class modellingmanager(modelob):
             ask_prob, atimetofill = self.probordercompletion2(self.forcast_estimate_time, 1)
             bid_gmean = self.probordercompletion(self.forcast_estimate_time, 0)
             ask_gmean = self.probordercompletion(self.forcast_estimate_time, 1)
-            thresh = 0.18
+            thresh = 0.15
             self.price_prediction = self.mid
-            if bid_prob>ask_prob+thresh:
-                print('price falling')
-                self.price_prediction = self.down_price
-                self.stats.add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction, self.price_prediction-self.mid)
-            if ask_prob>bid_prob+thresh:
-                print('price rising')
-                self.price_prediction = self.up_price
-                self.stats.add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction, self.price_prediction-self.mid)
-            self.confidence = abs(ask_prob-bid_prob)
-
+            diffg = bid_gmean - ask_gmean
+            for x in range(0,len(self.stats),1):
+                if bid_prob>ask_prob+thresh : # and (abs(diffg) > thresh*0.5 or abs(diffg)<0.05)
+                    print('price falling')
+                    self.price_prediction = self.down_price
+                    price_diff = self.price_prediction - self.mid
+                    if abs(price_diff)>2*self.tick:
+                        self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction, price_diff, diffg)
+                if ask_prob>bid_prob+thresh:
+                    print('price rising')
+                    self.price_prediction = self.up_price
+                    price_diff = self.price_prediction - self.mid
+                    if abs(price_diff)>2*self.tick:
+                        self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction, price_diff, diffg)
+                thresh += 0.1
+            self.confidence = abs(ask_prob - bid_prob)
 
             nn = np.array([[current_time * 1000, self.mid, past_prob_blo_live, prob_blo_live, prob_alo_live,
                             bid_prob,ask_prob,bid_gmean,ask_gmean, btimetofill[0], atimetofill[0],self.price_prediction]])
