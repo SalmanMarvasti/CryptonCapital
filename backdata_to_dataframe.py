@@ -29,7 +29,10 @@ def convert_utc_to_epoch_trades(timestamp_string):
     return epoch
 count_hist = 0
 prevdate=0
-def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
+
+count_hist = 0
+prevdate=0
+def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=False):
     # df = pd.read_csv(inFile, delimiter=';')
     global count_hist
     global prevdate
@@ -39,13 +42,19 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
     new_ot = pd.DataFrame(
         {'date': ot.time_exchange.apply(convert_utc_to_epoch), 'type': ot.is_buy, 'price': ot.entry_px,
          'amount': ot.entry_sx, 'update_type': ot.update_type}, columns=['date', 'type', 'price', 'amount', 'update_type'])
-    new_ot.sort_values('date', kind='mergesort', inplace=True)
+    new_ot.sort_values(['date','type'], kind='mergesort', inplace=True)
 
 
     #  new_ob.type = [0 if x else 1 for x in new_ob.type]
 
     # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
     cur_dates = new_ot['date'].unique()
+    max_date = cur_dates.max()
+    min_date = cur_dates.min()
+    #condition = trades['time_exchange']>min_date and trades['time_exchange']>max_date
+    #trades.loc[condition]
+    cur_trades = trades[min_date:max_date]
+
     text_dates = pd.to_datetime(cur_dates, unit='s')
     x = 0
     print('going through dates')
@@ -57,32 +66,8 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
 
         for cdate in cur_dates:
             temp_ot = new_ot.loc[new_ot.date == cdate]
-            #temp_ot = temp_ot.set_index('price')
-            #temp_ot_up = update_addsub.loc[new_ot.date == cdate]
-            #if(temp_ot_up.shape[0]!=temp_ot.shape[0]):
-            #    raise ValueError("mismatched shape for update")
-
-
-
-
-            # temp_ot_add = temp_ot.loc[temp_ot['update_type']=='ADD'].groupby(['price']).sum()
-            # temp_ot_sub = temp_ot.loc[temp_ot['update_type']=='SUB'].groupby(['price']).sum()
-            # m=pd.merge(nob, temp_ot_add, left_index=True,right_index=True, how='outer')
-            # m.fillna(0,inplace=True)
-            # m.loc[:, 'amount'] = m.loc[:, ['amount_x', 'amount_y']].sum(axis=1)
-            # #
-            # #
-            # #
-            # nob = m[['date_x','type_x', 'amount']]
-            # nob.rename(columns={'date_x':'date','type_x':'type'}, inplace=True)
-            # # nob['date'] = cdate
-            # m = pd.merge(nob, temp_ot_sub, left_index=True, right_index=True, how='outer')
-            # m.fillna(0, inplace=True)
-            # m.loc[:, 'amount'] = m.loc[:, 'amount_x'] - m.loc[:, 'amount_y']
-            # nob = m[['date_x','type_x', 'amount']]
-            #
-            # nob.rename(columns={'date_x':'date','type_x':'type'}, inplace=True)
-
+            #bids = temp_ot.loc[temp_ot.type==1]
+            # asks = temp_ot.loc[temp_ot.type==0]
 
             for i in range(0, len(temp_ot)):
                 row_to_append = temp_ot.iloc[i]
@@ -143,7 +128,7 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
                             nob.set_index(['price', 'type'], inplace=True)
                             nob = nob.loc[nob.amount != 0]
                             snapshot_removed_ot = ot.iloc[start_row:-1,:]
-                            nob = rewrite_cointick(inFile, outFile, snapshot_removed_ot, nob, w, save_plots)
+                            nob = return_bids_asks_cointick(inFile, outFile, snapshot_removed_ot, nob, w, save_plots)
                             return nob
                         if row_to_append.amount !=0:
                             raise ValueError("cannot subtract from nonexistant price"+str(p)+urow_to_append+' date'+str(text_dates[x]))
@@ -152,13 +137,6 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
 
         nob.loc[:,'date'] = cdate
         nob.sort_index(inplace=True)
-
-        # csv_writer.writerow(nob.reset_index().values.tolist())
-        #if cdate%30==0:
-        #    nob = nob.loc[nob.amount!=0]
-        #nob.to_csv(file, header=False, chunksize=10000)
-
-
 
         if (cdate - prevdate)>1:
             nob = nob.loc[nob.amount != 0]
@@ -175,17 +153,59 @@ def rewrite_cointick(inFile, outFile, ot, nob, w,save_plots=False):
                 # colorhistbars(patches, rnob['type'].values)
                 # plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(count_hist) + '.png')
                 # count_hist += 1
-            w.writerows(rnob.values)
+            # w.writerows(rnob.values)
             print('writing nob' + str(x)+' '+str(text_dates[x]))
             prevdate = cdate
         x = x + 1
     return nob
-    # if (x<nArray.shape[0]):
-    #     nArray[x:x+tnob.shape[0],0:] = tnob.values
-    # else:
-    #     print('warning slow append')
-    #     nArray = np.append(nArray, tnob.values)
-    # x = x + nob.shape[0]
+
+
+
+
+import time
+def rewrite_cointick_chunk(basepath, lobfile, outFile,save_plots=False):
+    first = True
+    output_path = './ob/' + outFile
+    inFile = os.path.join(basepath, lobfile)
+    tradepath = os.path.join(basepath, 'trades')
+    tradefile = os.path.join(tradepath, lobfile)
+
+    try:
+        trade_df = pd.read_csv(tradefile, delimiter=';')
+
+    except Exception as e:
+        print('error loading trade gz file.. retrying'+str(e))
+        trade_df = pd.read_csv(tradefile[:-3], delimiter=';') #print('processing trades')
+    trade_df = trade_df.iloc[:,[0, -3,-2,-1]]  # ['time_exchange','price','base_amount','taker_side']
+    trade_df.loc[:,'time_exchange'] = trade_df['time_exchange'].apply(convert_utc_to_epoch_trades)
+    col = trade_df.loc[:,'taker_side'] == 'SELL'
+    trade_df.loc[:,'taker_side'] = col.astype(int)
+
+    trade_df = trade_df.set_index('time_exchange')
+    # gc.disable()
+    with open(output_path, "rb") as file:
+
+        s = time.time()
+        countn = 0
+        day_trades = pd.read_csv('./')
+        for df in pd.read_csv(inFile, delimiter=';', chunksize=800):
+            if first:
+                ob = df.loc[df['update_type'] == 'SNAPSHOT']
+                new_ob = pd.DataFrame({'date': ob.time_exchange.apply(convert_utc_to_epoch), 'type': ob.is_buy, 'price': ob.entry_px, 'amount': ob.entry_sx}, columns=['date', 'type', 'price', 'amount'])
+                first = False
+                nob = new_ob.set_index(['price','type'])
+                df = df.loc[df['update_type'] != 'SNAPSHOT']
+                nob.sort_index(inplace=True)
+            nob,curtrade = return_bids_asks_cointick(inFile,outFile,trade_df, df,nob,file,save_plots)
+            countn +=1
+            if(countn%5==0):
+                etime = time.time()
+                print('timed 30 runs' + str(etime-s))
+                s=etime
+
+    print('finished appending')
+
+
 
 def gen_date_prefix(strpath):
     global date_prefix
@@ -204,23 +224,23 @@ if __name__ == "__main__":
 
     tradepairfile = 'PERP_BTC'
 
-    if runTrades:
-        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/trades/'):
-            for filename in files:
-                filename = os.fsdecode(filename)
-                gen_date_prefix(root)
-                if filename.find(tradepairfile) > -1:
-                    rewrite_cointick(root+'/'+filename, 'c:\\temp\\df\\'+date_prefix+filename[:-3])
+    # if runTrades:
+    #     for root, dirs, files in os.walk('d:\\bitmex\\ob\\'):
+    #         for filename in files:
+    #             filename = os.fsdecode(filename)
+    #             gen_date_prefix(root)
+    #             if filename.find(tradepairfile) > -1:
+    #                 rewrite_cointick(root+'/'+filename, 'c:\\temp\\df\\'+date_prefix+filename[:-3])
     if runOrderBook:
         # media/oem/79EF-A9BE/
-        for root, dirs, files in os.walk('/media/oem/79EF-A9BE/bitmex/orderbook/'):
+        for root, dirs, files in os.walk('d:\\bitmex\\ob\\'):
 
             for filename in files:
                 filename = os.fsdecode(filename)
                 gen_date_prefix(root) # generate the month day for datetime from folder
                 if filename.find(tradepairfile)>-1:
                     filename
-                    #rewrite_cointick_chunk(root+'/'+filename, date_prefix+filename[:-3],True)
+                    rewrite_cointick_chunk(root,filename, date_prefix+filename[:-3],True)
                     #just_convert_dates(root+'/'+filename, 'DATE_CHANGE_'+date_prefix+filename[:-3])
 
 
