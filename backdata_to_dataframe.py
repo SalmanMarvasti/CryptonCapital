@@ -50,7 +50,7 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
     # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
     cur_dates = new_ot['date'].unique()
     max_date = cur_dates.max()
-    min_date = cur_dates.min()
+    min_date = cur_dates.min()-5
     #condition = trades['time_exchange']>min_date and trades['time_exchange']>max_date
     #trades.loc[condition]
     cur_trades = trades[min_date:max_date]
@@ -138,7 +138,7 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
         nob.loc[:,'date'] = cdate
         nob.sort_index(inplace=True)
 
-        if (cdate - prevdate)>1:
+        if (cdate - prevdate)>20:
             nob = nob.loc[nob.amount != 0]
             rnob = nob.reset_index()
             if count_hist>2000:
@@ -157,7 +157,7 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
             print('writing nob' + str(x)+' '+str(text_dates[x]))
             prevdate = cdate
         x = x + 1
-    return nob
+    return nob,cur_trades
 
 
 
@@ -166,6 +166,7 @@ import time
 def rewrite_cointick_chunk(basepath, lobfile, outFile,save_plots=False):
     first = True
     output_path = './ob/' + outFile
+    output_trade = './ob/'+ 'tradefile'
     inFile = os.path.join(basepath, lobfile)
     tradepath = os.path.join(basepath, 'trades')
     tradefile = os.path.join(tradepath, lobfile)
@@ -197,6 +198,8 @@ def rewrite_cointick_chunk(basepath, lobfile, outFile,save_plots=False):
                 df = df.loc[df['update_type'] != 'SNAPSHOT']
                 nob.sort_index(inplace=True)
             nob,curtrade = return_bids_asks_cointick(inFile,outFile,trade_df, df,nob,file,save_plots)
+            nob.to_pickle(output_path+str(countn))
+            curtrade.to_pickle(output_trade+str(countn))
             countn +=1
             if(countn%5==0):
                 etime = time.time()
