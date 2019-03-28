@@ -11,7 +11,7 @@ def convert_utc_to_epoch(timestamp_string):
     # timestamp_string.rstrip('0')
 
     con = date_prefix+timestamp_string
-    timestamp = datetime.strptime(con, '%Y-%m-%d %H:%M:%S')
+    timestamp = datetime.datetime.strptime(con, '%Y-%m-%d %H:%M:%S')
 
     timestamp = timestamp.replace(tzinfo=pytz.utc)
     epoch = timestamp.timestamp()
@@ -53,7 +53,7 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
     min_date = cur_dates.min()-5
     #condition = trades['time_exchange']>min_date and trades['time_exchange']>max_date
     #trades.loc[condition]
-    cur_trades = trades[min_date:max_date]
+    cur_trades = trades[min_date-10:max_date]
 
     text_dates = pd.to_datetime(cur_dates, unit='s')
     x = 0
@@ -154,7 +154,7 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
                 # plt.savefig(DOWNLOAD_LOCATION_PATH + 'img/hist' + outFile[:-3] + str(count_hist) + '.png')
                 # count_hist += 1
             # w.writerows(rnob.values)
-            print('writing nob' + str(x)+' '+str(text_dates[x]))
+            # print('writing nob' + str(x)+' '+str(text_dates[x]))
             prevdate = cdate
         x = x + 1
     return nob,cur_trades
@@ -166,7 +166,7 @@ import time
 def rewrite_cointick_chunk(basepath, lobfile, outFile,save_plots=False):
     first = True
     output_path = './ob/' + outFile
-    output_trade = './ob/'+ 'tradefile'
+    output_trade = './ob/'+ 'trade_'+outFile
     inFile = os.path.join(basepath, lobfile)
     tradepath = os.path.join(basepath, 'trades')
     tradefile = os.path.join(tradepath, lobfile)
@@ -184,12 +184,11 @@ def rewrite_cointick_chunk(basepath, lobfile, outFile,save_plots=False):
 
     trade_df = trade_df.set_index('time_exchange')
     # gc.disable()
-    with open(output_path, "rb") as file:
+    with open(output_path, "wb") as file:
 
         s = time.time()
         countn = 0
-        day_trades = pd.read_csv('./')
-        for df in pd.read_csv(inFile, delimiter=';', chunksize=800):
+        for df in pd.read_csv(inFile, delimiter=';', chunksize=600):
             if first:
                 ob = df.loc[df['update_type'] == 'SNAPSHOT']
                 new_ob = pd.DataFrame({'date': ob.time_exchange.apply(convert_utc_to_epoch), 'type': ob.is_buy, 'price': ob.entry_px, 'amount': ob.entry_sx}, columns=['date', 'type', 'price', 'amount'])
@@ -198,8 +197,8 @@ def rewrite_cointick_chunk(basepath, lobfile, outFile,save_plots=False):
                 df = df.loc[df['update_type'] != 'SNAPSHOT']
                 nob.sort_index(inplace=True)
             nob,curtrade = return_bids_asks_cointick(inFile,outFile,trade_df, df,nob,file,save_plots)
-            nob.to_pickle(output_path+str(countn))
-            curtrade.to_pickle(output_trade+str(countn))
+            nob.to_pickle(output_path[:-4]+str(countn))
+            curtrade.to_pickle(output_trade[:-4]+str(countn))
             countn +=1
             if(countn%5==0):
                 etime = time.time()
@@ -220,8 +219,6 @@ def gen_date_prefix(strpath):
 
 if __name__ == "__main__":
 
-    #outFile = 'NEW_BITMEX_PERP_BTC_USD2.csv'
-    #inFile = 'BITMEX_PERP_BTC_USD.csv'
     runTrades = False
     runOrderBook = True # d:/bitmex/orderbook/11/03
 
@@ -241,7 +238,7 @@ if __name__ == "__main__":
             for filename in files:
                 filename = os.fsdecode(filename)
                 gen_date_prefix(root) # generate the month day for datetime from folder
-                if filename.find(tradepairfile)>-1:
+                if filename.find(tradepairfile)>-1 and root.find('trades')==-1:
                     filename
                     rewrite_cointick_chunk(root,filename, date_prefix+filename[:-3],True)
                     #just_convert_dates(root+'/'+filename, 'DATE_CHANGE_'+date_prefix+filename[:-3])
