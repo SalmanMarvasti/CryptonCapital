@@ -154,7 +154,7 @@ class PublishServer:
                 bidvol += o.bids[i, 1] * scale
             noimpact_vol=1
             if len(o.marketorders)==0:
-                self.mosize=self.mosize*90
+                self.mosize=self.mosize*0.90
             else:
                 mosize = np.sum(o.marketorders[:,1])/len(o.marketorders)
                 self.mosize=mosize*0.6+self.mosize*0.4
