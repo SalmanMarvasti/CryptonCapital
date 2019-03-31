@@ -359,7 +359,7 @@ class modellingmanager(modelob):
         self.stats[x].thresh = thresh
         if bid_prob > ask_prob + thresh:  # and (abs(diffg) > thresh*0.5 or abs(diffg)<0.05)
             print('price falling')
-            self.price_prediction = down_price
+            price_prediction = down_price
             price_diff = self.price_prediction - self.mid
 
             if abs(price_diff) > 2 * self.tick:
@@ -368,7 +368,7 @@ class modellingmanager(modelob):
         if ask_prob > bid_prob + thresh:
             print('price rising')
             up = 1
-            self.price_prediction = up_price
+            price_prediction = up_price
             price_diff = self.price_prediction - self.mid
             if abs(price_diff) > 2 * self.tick:
                 self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction,
@@ -530,7 +530,7 @@ class modellingmanager(modelob):
                 R = 4
             if (now.timestamp() - self.datetime.timestamp() > 100):
                 mean_np = np.mean(self.nfs_hist,axis=0)
-                mid_level=4
+                mid_level=3
                 mean_np[12-mid_level:12+mid_level]=nfs.values[12-mid_level:12+mid_level]
                 mean_nfs = pd.DataFrame.from_records(mean_np, columns=['price', 'amount'])
                 bid,ask, totalask, totalbid = calc_vwap(mean_nfs.loc[mean_nfs.price<0].sort_index(0, ascending=False).values, mean_nfs.loc[mean_nfs.price>0].values, R)
@@ -585,8 +585,13 @@ class modellingmanager(modelob):
             #bid_prob = bid_gmean
             #ask_prob = ask_gmean
             for x in range(0,len(self.stats)-1,1):
-                self.predict_and_simtrade(current_time, bid_prob,ask_prob, diffg, x,self.up_price, self.down_price, thresh)
+                up=self.predict_and_simtrade(current_time, bid_prob,ask_prob, diffg, x,self.up_price, self.down_price, thresh)
                 thresh += 0.05
+
+            if(up):
+                self.price_prediction = self.up_price
+            else:
+                self.price_prediction = self.down_price
 
             thresh=0.29
             if ask_gmean>0.1 and bid_gmean>0.1:
