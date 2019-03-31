@@ -32,13 +32,18 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
     time_ind = 0
     year=2018
     month=12
-    day=1
+    day=3
     exchange='BITMEX'
     pair_ix='PERP_BTC_USD'
     base_dir='./ob/'
 
+    # def __init__(self):
+    #     global pair
+    #     if pair.upper()!='XBTUSD':
+    #         exchange='BINANCE'
+
     def genFileName(self,ind):
-        str(dt.datetime(day=self.day, month=self.month, year=self.year))[:10] +self.exchange+'-'+self.pair_ix+str(ind)
+        return str(dt.datetime(day=self.day, month=self.month, year=self.year))[:10] + ' ' +self.exchange+'_'+self.pair_ix+str(ind)
 
 
     def get_lob(self):
@@ -51,12 +56,12 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         # trades = pickle
 
     def get_trades(self):
-        filestr = (self.genFileName(self.time_ind))
+        filestr = 'trade_'+(self.genFileName(self.time_ind))
         tradefile = self.base_dir+filestr
-        #tradefile =
+
         print(filestr)
         f = open(tradefile, 'rb')
-        return pickle.load(filestr)
+        return pickle.load(f).reset_index()
         # trades = pickle
 
 
@@ -81,7 +86,7 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         blist = []
         r=0
         for x in range(0 , tradedf.shape[0]):
-            dic = {'pair': pair, 'price': tradedf.loc[x,'price'], 'qty' : tradedf.loc[x,'base_amount'] , 'time': tradedf.loc[x , 'time_exchange'], 'isBuyerMaker': tradedf.loc[x , 'taker_side']}
+            dic = {'pair': pair, 'price': tradedf.loc[x,'price'], 'qty' : int(tradedf.loc[x,'base_amount']) , 'time': int(tradedf.loc[x , 'time_exchange']), 'isBuyerMaker': int(tradedf.loc[x , 'taker_side'])}
             blist.append(dic)
             r = r+1
         return blist
@@ -91,19 +96,18 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         self.send_response(requests.codes.ok, "thanks for contacting us")
         self.end_headers()
 
+        print('time ind'+str(self.time_ind))
         #response = io.BytesIO()
         #response.write(b'This is POST request. ')
         #response.write(b'Received: ')
-        body = self.recent_trades()
-        ltrades = self.createListFromTrades(body)
+        trades = self.get_trades()
+        ltrades = self.createListFromTradesDF(trades)
         s = json.dumps(ltrades)
         if len(ltrades) != 0:
             print(ltrades[-1])
 
-        #response.write(s)
-
         self.wfile.write(s.encode('utf-8'))
-
+        self.time_ind += 1
         return
 
 
@@ -123,7 +127,7 @@ class TestMockServer(object):
     @classmethod
     def setup_class(cls):
         # Configure mock server.
-        cls.mock_server_port = 53581 #get_free_port()
+        cls.mock_server_port = get_free_port()
         cls.mock_server = HTTPServer(('localhost', cls.mock_server_port), MockServerRequestHandler)
 
         # Start running mock server in a separate thread.
@@ -153,10 +157,10 @@ if __name__ == "__main__":
     pair = 'XBTUSD'
     if len(sys.argv)>1:
         pair = sys.argv[1]
-        ws = getBitmexWs(sys.argv[1])
-    else:
-        ws = getBitmexWs(pair)
-    t=TestMockServer(pair)
+        # ws = getBitmexWs(sys.argv[1])
+    # else:
+    #     ws = getBitmexWs(pair)
+    t = TestMockServer(pair)
     t.setup_class()
     t.test_request_response()
     while True:
