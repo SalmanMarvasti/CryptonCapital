@@ -121,7 +121,7 @@ class prediction_checker:
                         price_diff = price - entry_price
                     if timepassed>300 and (price_diff)<0 and abs(price_diff)>abs(a[2]): # was 5 in last real time test
                         logging.info('order stopped')
-                        loss_amount = price_diff
+                        loss_amount = abs(price_diff)
                         self.dollar_gain -= loss_amount
                         self.number_stopped += 1
                         self.stoppedlist.append((a, loss_amount, timepassed))
@@ -783,7 +783,7 @@ if __name__ == "__main__":
     f = open(prefix+str(tp.name)+'marketorders4.csv', 'ab')
     fob = open(prefix+str(tp.name)+'orderbooks4.csv', 'ab')
     l = task.LoopingCall(cr.getlatestob,f,fob,fp)
-    l.start(cr.tradewindow_sec-2)  # call every tradewindow_sec seconds
+    l.start(cr.tradewindow_sec-1)  # call every tradewindow_sec seconds
 
     # l.stop() will stop the looping calls
     reactor.run()
