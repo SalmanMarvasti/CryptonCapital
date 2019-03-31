@@ -169,6 +169,7 @@ if __name__ == "__main__":
     c = ReadRequestResponseThread(name='response', target='traderesponse' )
 
     p.start()
+    time.sleep(1)
     c.start()
     print('adding more stuff to queue')
     for i in range(1, 10):

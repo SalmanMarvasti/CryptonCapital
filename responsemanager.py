@@ -245,7 +245,7 @@ class PublishServer:
             mydict = {'id': jl['id'], 'time_to_fill':timetofill, 'cur_mid': o.mid, 'vwap': o.vwap,
                       'valid_for_sec': o.tradewindow_sec*5 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)],
                       'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill,'pred_price':o.price_prediction,'prediction_stat_winrates':[o.stats[1].number_correct/o.stats[1].number_of_predictions, o.stats[2].number_correct/o.stats[2].number_of_predictions, o.stats[3].number_correct/o.stats[3].number_of_predictions],
-                      'prediction_stat':[o.stats[0].number_of_predictions, o.stats[0].number_correct, o.stats[0].dollar_gain, o.stats[0].get_average_time_to_fill()]}
+                      'prediction_stat':[o.stats[0].number_of_predictions, o.stats[0].number_correct,o.stats[0].number_stopped, o.stats[0].dollar_gain, o.stats[0].get_average_time_to_fill()]}
             logging.info('publishing'+str(mydict))
             print('publishing'+str(mydict))
             rval = json.dumps(mydict)

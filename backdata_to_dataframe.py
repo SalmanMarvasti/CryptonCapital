@@ -92,7 +92,7 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
                                 # nob.loc[p, ['type','amount']] = row_to_append[[ 1, 3]]
                             else:
                                 if nob.loc[p, 'amount']==0 or  nob.loc[p,'amount']<row_to_append.amount:
-                                    raise ValueError('error cant have negative')
+                                    print('Warning negative values here')
                                 nob.loc[p,'amount'] -= row_to_append[3]
 
 
@@ -128,7 +128,7 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
                             nob.set_index(['price', 'type'], inplace=True)
                             nob = nob.loc[nob.amount != 0]
                             snapshot_removed_ot = ot.iloc[start_row:-1,:]
-                            nob = return_bids_asks_cointick(inFile, outFile, snapshot_removed_ot, nob, w, save_plots)
+                            nob = return_bids_asks_cointick(inFile, outFile, trades,snapshot_removed_ot, nob, w, save_plots)
                             return nob
                         if row_to_append.amount !=0:
                             raise ValueError("cannot subtract from nonexistant price"+str(p)+urow_to_append+' date'+str(text_dates[x]))
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     #                 rewrite_cointick(root+'/'+filename, 'c:\\temp\\df\\'+date_prefix+filename[:-3])
     if runOrderBook:
         # media/oem/79EF-A9BE/
-        for root, dirs, files in os.walk('d:\\bitmex\\ob\\'):
+        for root, dirs, files in os.walk('d:\\bitmex\\ob\\12\\03'):
 
             for filename in files:
                 filename = os.fsdecode(filename)
@@ -244,3 +244,4 @@ if __name__ == "__main__":
                     #just_convert_dates(root+'/'+filename, 'DATE_CHANGE_'+date_prefix+filename[:-3])
 
 
+        print('completed folder')

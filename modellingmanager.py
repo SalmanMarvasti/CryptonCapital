@@ -73,7 +73,7 @@ def convert_to_ndarray(k, ctime, isAsk=0):
 FIXTIC = 0.015625
 
 class prediction_checker:
-    FIXED_OFFSET = 1800
+    FIXED_OFFSET = 1500
     def __init__(self, thresh=0.2):
         self.predlist = []
         self.number_of_predictions = 1 # prevent divide by zero erros
@@ -86,6 +86,8 @@ class prediction_checker:
         self.dollar_gain = 0
         #self.FIXED_OFFSET = 2000
         self.filledlist = []
+        self.stoppedlist = []
+        self.expiredlist = []
         self.thresh=thresh
 
     def get_average_time_to_fill(self):
@@ -107,24 +109,41 @@ class prediction_checker:
             if timestamp<a[0]:
                 if abs(price-a[1])<tick*0.5 or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
                     self.number_correct+=1
-                    self.dollar_gain+=max(abs(a[2]),abs(price-a[1])-self.tick)
+                    entry_price = a[1]-a[2]
+                    self.dollar_gain+=max(abs(a[2]),abs(price-entry_price))
                     self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET, a[3]))
                 else:
-                    if (abs(price-a[1]+a[2])>abs(a[2])+2*self.tick):
+                    timepassed = timestamp-a[0]+self.FIXED_OFFSET
+                    entry_price = a[1] -a[2]
+                    if a[2]<0: # gone short
+                        price_diff = entry_price - price
+                    else: # gone long
+                        price_diff = price - entry_price
+                    if timepassed>300 and (price_diff)<0 and abs(price_diff)>abs(a[2]): # was 5 in last real time test
                         logging.info('order stopped')
-                        self.dollar_gain -= abs(a[2])+self.tick
+                        loss_amount = price_diff
+                        self.dollar_gain -= loss_amount
                         self.number_stopped += 1
+                        self.stoppedlist.append((a, loss_amount, timepassed))
                     else: # keep order for now
                         newlist.append(a)
             else:
                 print('order expired')
-                self.dollar_gain -= abs(price-a[1])
+                entry_price = a[1] - a[2]
+                diff = a[2]
+                if diff>0:
+                    change_amount = price-entry_price
+                    self.dollar_gain += change_amount
+                else:
+                    change_amount = entry_price - price
+                    self.dollar_gain += change_amount
+                self.expiredlist.append((a, change_amount))
         self.predlist = newlist
 
     def __len__(self):
         return self.number_of_predictions
     def add_pred(self, validtill_timestamp, predicted_price, price_diff=0, confidence=0):
-        if len(self.predlist)>0 and abs(predicted_price - self.predlist[-1][1])<(self.tick * 0.5):
+        if len(self.predlist)>0 and abs(predicted_price - self.predlist[-1][1])<(self.tick):
             print('ignoring duplicate prediction')
             return
         self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence))
@@ -169,18 +188,19 @@ class modelob:
         self.alo_probs = deque([0.99, 0.9], maxlen=15)
         self.bids_hist = deque([0.99, 0.9], maxlen=15)
         self.asks_hist = deque([0.99, 0.9], maxlen=15)
-        self.nfs_hist = deque([], maxlen=10)
-        self.mid = deque([], maxlen=5)
+        self.nfs_hist = deque(maxlen=10)
+        self.mid_hist = deque([], maxlen=5)
+        self.mid = 0
         self.tick = FIXTIC  # 1/64
         self.vwap = -1.0
         self.df = pd.DataFrame()
         self.filepath = './'
         # static const variables
-        self.forcast_estimate_time = 90
+        self.forcast_estimate_time = 100
         self.probfmt = '%2.9f'
         self.SAVEDEBUG = True
-        self.buy_sum=deque([], maxlen=4)
-        self.sell_sum=deque([], maxlen=4)
+        self.buy_sum=deque([], maxlen=6)
+        self.sell_sum=deque([], maxlen=6)
         logging.debug('{0} modelling manager initialised'.format(self.tradingpair))
         self.dic_probs = {}
 
@@ -227,6 +247,8 @@ class modelob:
 class modellingmanager(modelob):
     def __init__(self, acct):
         modelob.__init__(self, acct)
+        self.bid_gmean=0
+        self.ask_gmean=0
 
     def get_fmt_list(self, timefmt, probfmt, N):
         nnfmt = [timefmt, timefmt]
@@ -332,21 +354,26 @@ class modellingmanager(modelob):
         self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
         self.asks[:, 3] = np.ones(len(self.asks))
 
-    def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, thresh=0.18):
+    def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, up_price, down_price, thresh=0.18):
+        up = 0
+        self.stats[x].thresh = thresh
         if bid_prob > ask_prob + thresh:  # and (abs(diffg) > thresh*0.5 or abs(diffg)<0.05)
             print('price falling')
-            self.price_prediction = self.down_price
+            self.price_prediction = down_price
             price_diff = self.price_prediction - self.mid
+
             if abs(price_diff) > 2 * self.tick:
                 self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction,
                                        price_diff, prob_diff)
         if ask_prob > bid_prob + thresh:
             print('price rising')
-            self.price_prediction = self.up_price
+            up = 1
+            self.price_prediction = up_price
             price_diff = self.price_prediction - self.mid
             if abs(price_diff) > 2 * self.tick:
                 self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction,
                                        price_diff, prob_diff)
+        return up
 
     def getmarketorders_frombackupapi(self, mid):
         current_time = time.time()
@@ -406,10 +433,12 @@ class modellingmanager(modelob):
                 self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
                 self.asks[:,3] = np.ones(len(self.asks))
                 self.mid = (self.asks[0, 0] + self.bids[0, 0]) * 0.5
-                (bvwap, avwap, totala, totalb) = calc_vwap(self.bids, self.asks, 7)
+                (bvwap, avwap, totala, totalb) = calc_vwap(self.bids, self.asks, 6)
                 self.vwap = (bvwap*totalb+avwap*totala)/(totala+totalb)
                 self.up_price = avwap
                 self.down_price = bvwap
+                self.up_price_2 = avwap*1.001
+                self.down_price_2 = bvwap*1.001
                 # saveasks = self.asks
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
@@ -487,34 +516,34 @@ class modellingmanager(modelob):
         if self.tick==FIXTIC:
             self.tick = self.choosetick(tick_do/2, tick/3)
         self.bins = np.arange(dfbids['price'].min(), dfasks['price'].max(), self.tick*2)
-        if self.tradingpair.upper()=='XBTUSD':
-            if self.tick<0.5:
-                self.tick=0.5
+        # if self.tradingpair.upper()=='XBTUSD':
+        #     if self.tick<0.5:
+        #         self.tick=0.5
         mdf = pd.concat([dfbids, dfasks], ignore_index=True)
         try:
             nfs = convert_df_bins(mdf, self.bins)
-            nfs.index.name='priceindex'
+            nfs.index.name = 'priceindex'
             print(nfs)
-
-            # bid,ask, totalask, totalbid = calc_vwap(nfs.loc[nfs.price<0].sort_index(0, ascending=False).values, nfs.loc[nfs.price>0].values)
-            # self.down_price = self.mid + bid*0.51
-            # self.up_price = self.mid + ask*0.51
+            R = 3
+            now = dt.datetime.utcnow()
+            if self.bid_gmean>0.3 or self.ask_gmean>0.3:
+                R = 4
+            if (now.timestamp() - self.datetime.timestamp() > 100):
+                mean_np = np.mean(self.nfs_hist,axis=0)
+                mid_level=4
+                mean_np[12-mid_level:12+mid_level]=nfs.values[12-mid_level:12+mid_level]
+                mean_nfs = pd.DataFrame.from_records(mean_np, columns=['price', 'amount'])
+                bid,ask, totalask, totalbid = calc_vwap(mean_nfs.loc[mean_nfs.price<0].sort_index(0, ascending=False).values, mean_nfs.loc[mean_nfs.price>0].values, R)
+                self.down_price_2 = self.mid + bid*0.50
+                self.up_price_2 = self.mid + ask*0.50
         except Exception as e:
-            print('Exception NFS' + e)
+            print('Exception NFS' + str(e))
         self.df = nfs
         sell_order_per_sec = sell_sum/self.tradewindow_sec
         buy_order_per_sec = buy_sum/self.tradewindow_sec
-        now = dt.datetime.utcnow()
-        # if(now.timestamp()-self.datetime.timestamp()>100): # TODO enable this later
-        #     med_bids = self.bids
-        #     med_bids[:,1] = med_bids[:,1]-self.asks[:,1]
-        #     med_asks = self.asks
-        #     med_asks[:,1] = med_asks[:,1] - self.bids[:,1]
-        #     med_bids[0:8,:] = self.bids[0:8,:]
-        #     med_asks[0:8, :] = self.asks[0:8,:]
-        #     bvwap, avwap, totala, totalb = calc_vwap(med_bids, med_asks, 9)
-        #     self.up_price = avwap
-        #     self.down_price = bvwap
+
+        # TODO enable this later
+
         if (now.minute%15==0):
             self.dic_probs[now.hour+now.minute/60]=(sell_order_per_sec,buy_order_per_sec)
             logging.info(self.dic_probs)
@@ -545,18 +574,23 @@ class modellingmanager(modelob):
             ask_prob, atimetofill = self.probordercompletion2(self.forcast_estimate_time, 1)
             bid_gmean = self.probordercompletion(self.forcast_estimate_time, 0)
             ask_gmean = self.probordercompletion(self.forcast_estimate_time, 1)
-            thresh = 0.18
+            if self.bid_gmean > 0.4 or self.ask_gmean > 0.4:
+                R = 7 # should be 7 for this version
+                bvwap, avwap, totala, totalb = calc_vwap(self.bids, self.asks, R)
+                self.up_price = avwap
+                self.down_price = bvwap
+            thresh = 0.19
             self.price_prediction = self.mid
             diffg = bid_prob - ask_prob
             #bid_prob = bid_gmean
             #ask_prob = ask_gmean
             for x in range(0,len(self.stats)-1,1):
-                self.predict_and_simtrade(current_time, bid_prob,ask_prob, diffg, x, thresh)
+                self.predict_and_simtrade(current_time, bid_prob,ask_prob, diffg, x,self.up_price, self.down_price, thresh)
                 thresh += 0.05
 
-            thresh=0.20
-            if bid_gmean<0.4 or ask_gmean<0.4:
-                self.predict_and_simtrade(current_time, bid_prob, ask_prob, diffg, 3, thresh)
+            thresh=0.29
+            if ask_gmean>0.1 and bid_gmean>0.1:
+                self.predict_and_simtrade(current_time, bid_gmean, ask_gmean, diffg, 3, self.up_price_2, self.down_price_2,thresh)
 
             self.confidence = abs(ask_prob - bid_prob)
 
@@ -566,9 +600,10 @@ class modellingmanager(modelob):
             np.savetxt(pfile, nn, fmt=nnfmt, delimiter=',')
             pfile.flush()
             sfile.flush()
-
+        self.bid_gmean = bid_gmean
+        self.ask_gmean = ask_gmean
         self.blo_probs.append(prob_blo_live)
-        self.nfs_hist.append(nfs)
+        self.nfs_hist.append(nfs.values)
         self.bids_hist.append(self.bids)
         self.asks_hist.appendleft(self.asks)
         self.alo_probs.append(prob_alo_live)
@@ -748,7 +783,7 @@ if __name__ == "__main__":
     f = open(prefix+str(tp.name)+'marketorders4.csv', 'ab')
     fob = open(prefix+str(tp.name)+'orderbooks4.csv', 'ab')
     l = task.LoopingCall(cr.getlatestob,f,fob,fp)
-    l.start(cr.tradewindow_sec)  # call every tradewindow_sec seconds
+    l.start(cr.tradewindow_sec-2)  # call every tradewindow_sec seconds
 
     # l.stop() will stop the looping calls
     reactor.run()
