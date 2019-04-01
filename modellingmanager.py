@@ -73,7 +73,7 @@ def convert_to_ndarray(k, ctime, isAsk=0):
 FIXTIC = 0.015625
 
 class prediction_checker:
-    FIXED_OFFSET = 1500
+    FIXED_OFFSET = 1700
     def __init__(self, thresh=0.2):
         self.predlist = []
         self.number_of_predictions = 1 # prevent divide by zero erros
@@ -116,12 +116,12 @@ class prediction_checker:
                     timepassed = timestamp-a[0]+self.FIXED_OFFSET
                     entry_price = a[1] -a[2]
                     if a[2]<0: # gone short
-                        price_diff = entry_price - price
+                        price_loss = entry_price - price
                     else: # gone long
-                        price_diff = price - entry_price
-                    if timepassed>300 and (price_diff)<0 and abs(price_diff)>abs(a[2]): # was 5 in last real time test
+                        price_loss = price - entry_price
+                    if ((price_loss)<0 and abs(price_loss)>2*abs(a[2])) or (timepassed>300 and (price_loss)<0 and abs(price_loss)>abs(a[2])): # was 5 in last real time test
                         logging.info('order stopped')
-                        loss_amount = abs(price_diff)
+                        loss_amount = abs(price_loss)
                         self.dollar_gain -= loss_amount
                         self.number_stopped += 1
                         self.stoppedlist.append((a, loss_amount, timepassed))
@@ -196,11 +196,11 @@ class modelob:
         self.df = pd.DataFrame()
         self.filepath = './'
         # static const variables
-        self.forcast_estimate_time = 100
+        self.forcast_estimate_time = 90
         self.probfmt = '%2.9f'
         self.SAVEDEBUG = True
-        self.buy_sum=deque([], maxlen=6)
-        self.sell_sum=deque([], maxlen=6)
+        self.buy_sum=deque([], maxlen=5)
+        self.sell_sum=deque([], maxlen=5)
         logging.debug('{0} modelling manager initialised'.format(self.tradingpair))
         self.dic_probs = {}
 
@@ -247,8 +247,10 @@ class modelob:
 class modellingmanager(modelob):
     def __init__(self, acct):
         modelob.__init__(self, acct)
-        self.bid_gmean=0
-        self.ask_gmean=0
+        self.bid_gmean = 0
+        self.ask_gmean = 0
+        self.orderarrival_bid = 0
+        self.orderarrival_ask = 0
 
     def get_fmt_list(self, timefmt, probfmt, N):
         nnfmt = [timefmt, timefmt]
@@ -355,23 +357,24 @@ class modellingmanager(modelob):
         self.asks[:, 3] = np.ones(len(self.asks))
 
     def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, up_price, down_price, thresh=0.18):
-        up = 0
+        up = -1
         self.stats[x].thresh = thresh
         if bid_prob > ask_prob + thresh:  # and (abs(diffg) > thresh*0.5 or abs(diffg)<0.05)
             print('price falling')
+            up = 0
             price_prediction = down_price
-            price_diff = self.price_prediction - self.mid
+            price_diff = price_prediction - self.mid
 
             if abs(price_diff) > 2 * self.tick:
-                self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction,
+                self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction,
                                        price_diff, prob_diff)
         if ask_prob > bid_prob + thresh:
             print('price rising')
             up = 1
             price_prediction = up_price
-            price_diff = self.price_prediction - self.mid
+            price_diff = price_prediction - self.mid
             if abs(price_diff) > 2 * self.tick:
-                self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, self.price_prediction,
+                self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction,
                                        price_diff, prob_diff)
         return up
 
@@ -521,28 +524,43 @@ class modellingmanager(modelob):
         #         self.tick=0.5
         mdf = pd.concat([dfbids, dfasks], ignore_index=True)
         try:
-            nfs = convert_df_bins(mdf, self.bins)
-            nfs.index.name = 'priceindex'
-            print(nfs)
+            nfs_df = convert_df_bins(mdf, self.bins)
+            nfs_df.index.name = 'priceindex'
+            print(nfs_df)
             R = 3
             now = dt.datetime.utcnow()
             if self.bid_gmean>0.3 or self.ask_gmean>0.3:
                 R = 4
             if (now.timestamp() - self.datetime.timestamp() > 100):
+                net_rate = nfs_df.values - self.nfs_hist[-1]
+                net_rate = net_rate[:,1]
+                orderarrival_ask = self.orderarrival_ask
+                orderarrival_bid = self.orderarrival_bid
+
+                avg_buy_sum = (self.buy_sum[-1] + self.buy_sum[-2])*0.5
+                avg_sell_sum = (self.sell_sum[-1] + self.sell_sum[-2])*0.5
+
+                if buy_sum < self.nfs_hist[-1][12,1]:
+                    orderarrival_ask = net_rate[12] + avg_buy_sum
+                if sell_sum < self.nfs_hist[-1][11,1]:
+                    orderarrival_bid = net_rate[11] + sell_sum
+                self.orderarrival_ask = orderarrival_ask
+                self.orderarrival_bid = orderarrival_bid
+
                 mean_np = np.mean(self.nfs_hist,axis=0)
                 mid_level=3
-                mean_np[12-mid_level:12+mid_level]=nfs.values[12-mid_level:12+mid_level]
+                mean_np[12-mid_level:12+mid_level]=nfs_df.values[12-mid_level:12+mid_level]
                 mean_nfs = pd.DataFrame.from_records(mean_np, columns=['price', 'amount'])
                 bid,ask, totalask, totalbid = calc_vwap(mean_nfs.loc[mean_nfs.price<0].sort_index(0, ascending=False).values, mean_nfs.loc[mean_nfs.price>0].values, R)
                 self.down_price_2 = self.mid + bid*0.50
                 self.up_price_2 = self.mid + ask*0.50
         except Exception as e:
             print('Exception NFS' + str(e))
-        self.df = nfs
+        self.df = nfs_df
         sell_order_per_sec = sell_sum/self.tradewindow_sec
         buy_order_per_sec = buy_sum/self.tradewindow_sec
 
-        # TODO enable this later
+
 
         if (now.minute%15==0):
             self.dic_probs[now.hour+now.minute/60]=(sell_order_per_sec,buy_order_per_sec)
@@ -560,8 +578,11 @@ class modellingmanager(modelob):
             past_prob_alo_live = (sum_asks[1] - past_order_per_sec[1]) / (sum_asks[1])
             if(past_order_per_sec[0]>0):
                 print('past order is greater than zero')
-        prob_blo_live = (sum_bids[1]-sell_order_per_sec)/(sum_bids[1])
-        prob_alo_live = (sum_asks[1] - buy_order_per_sec) / (sum_asks[1])
+        self.orderarrival_bid/=self.tradewindow_sec
+        self.orderarrival_ask/= self.tradewindow_sec
+
+        prob_blo_live = (sum_bids[1] + self.orderarrival_bid - sell_order_per_sec)/(sum_bids[1] + self.orderarrival_bid)
+        prob_alo_live = (sum_asks[1] + self.orderarrival_ask - buy_order_per_sec) / (sum_asks[1] + self.orderarrival_ask)
         floatfmt = '%30.9f'
         timefmt = '%30.3f'
         intfmt = '%i'
@@ -588,10 +609,11 @@ class modellingmanager(modelob):
                 up=self.predict_and_simtrade(current_time, bid_prob,ask_prob, diffg, x,self.up_price, self.down_price, thresh)
                 thresh += 0.05
 
-            if(up):
+            if(up==1):
                 self.price_prediction = self.up_price
             else:
-                self.price_prediction = self.down_price
+                if up==0:
+                    self.price_prediction = self.down_price
 
             thresh=0.29
             if ask_gmean>0.1 and bid_gmean>0.1:
@@ -608,7 +630,7 @@ class modellingmanager(modelob):
         self.bid_gmean = bid_gmean
         self.ask_gmean = ask_gmean
         self.blo_probs.append(prob_blo_live)
-        self.nfs_hist.append(nfs.values)
+        self.nfs_hist.append(nfs_df.values)
         self.bids_hist.append(self.bids)
         self.asks_hist.appendleft(self.asks)
         self.alo_probs.append(prob_alo_live)
