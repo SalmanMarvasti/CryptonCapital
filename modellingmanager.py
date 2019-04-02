@@ -110,8 +110,9 @@ class prediction_checker:
                 if abs(price-a[1])<tick*0.5 or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
                     self.number_correct+=1
                     entry_price = a[1]-a[2]
-                    self.dollar_gain+=max(abs(a[2]),abs(price-entry_price))
-                    self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET, a[3]))
+                    gain_amount = max(abs(a[2]),abs(price-entry_price))
+                    self.dollar_gain+=gain_amount
+                    self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET, gain_amount))
                 else:
                     timepassed = timestamp-a[0]+self.FIXED_OFFSET
                     entry_price = a[1] -a[2]
@@ -124,7 +125,7 @@ class prediction_checker:
                         loss_amount = abs(price_loss)
                         self.dollar_gain -= loss_amount
                         self.number_stopped += 1
-                        self.stoppedlist.append((a, loss_amount, timepassed))
+                        self.stoppedlist.append((a,  timepassed, -1*loss_amount))
                     else: # keep order for now
                         newlist.append(a)
             else:
