@@ -1,3 +1,5 @@
+import csv
+
 import redis
 import time
 import json
@@ -23,6 +25,29 @@ logging.basicConfig(level=logging.DEBUG,
 
 BUF_SIZE = 100
 q = queue.Queue(BUF_SIZE)
+
+def save_tup_list(filledlist, FIXED_OFFSET=1700):
+    ticksaway = []
+    for i in range(0, len(filledlist)):
+        li = []
+        for x in filledlist[i]:
+            if type(x) is tuple and len(x)>1:
+                li.append(x[0]-FIXED_OFFSET)
+            li.append(x)
+        ticksaway.append(li)
+    return ticksaway
+def save_o_stats(o, ind=3):
+    filled = save_tup_list(o.stats[ind].filledlist, o.stats[ind].FIXED_OFFSET)
+    stopped = save_tup_list(o.stats[ind].stoppedlist, o.stats[ind].FIXED_OFFSET)
+    with open('list_of_trades.csv', "w") as file:
+        w = csv.writer(file)
+        w.writerow(['trade_entry', 'details', 'duraction(s)', 'P/L amount'])
+        w.writerows(filled)
+        w.writerows(stopped)
+
+    #w.close()
+
+    return
 
 
 class RequestThread(threading.Thread):
@@ -99,9 +124,7 @@ def connredis(h):# if r unassigned defaults to local host
 
 class PublishServer:
     """
-        This class implements coinigy's REST api as documented in the documentation
-        available at
-        https://github.com/coinigy/api
+        This class implements redis pub sub
     """
 
     def __init__(self, acct):
