@@ -32,6 +32,11 @@ prevdate=0
 
 count_hist = 0
 prevdate=0
+def remove_duplicat_price_bidask(nob):
+    aaa = nob.reset_index()
+    aaa.loc[aaa.type == 1, ['amount']] = aaa[aaa.type == 1].amount * -1
+    bbb = aaa.groupby(['price', 'date']).sum()
+    return bbb.reset_index()
 def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=False):
     # df = pd.read_csv(inFile, delimiter=';')
     global count_hist
@@ -137,8 +142,9 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
 
         nob.loc[:,'date'] = cdate
         nob.sort_index(inplace=True)
-
-        if (cdate - prevdate)>20:
+        if (cdate - prevdate) > 10:
+            nob = remove_duplicat_price_bidask(nob)
+        if (cdate - prevdate)>1:
             nob = nob.loc[nob.amount != 0]
             rnob = nob.reset_index()
             if count_hist>2000:
@@ -159,7 +165,11 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
         x = x + 1
     return nob,cur_trades
 
-
+def remove_duplicat_price_bidask(nob):
+    aaa = nob.reset_index()
+    aaa.loc[aaa.type == 1, ['amount']] = aaa[aaa.type == 1].amount * -1
+    bbb = aaa.groupby(['price', 'date']).sum()
+    return bbb.reset_index()
 
 
 import time

@@ -13,6 +13,9 @@ import numpy as np
 import datetime as dt
 from bitmexwebsock import getBitmexWs
 import ciso8601
+
+time_ind = 0
+
 def convert_utc_to_epoch_trades(timestamp_string):
     '''Use this function to convert utc to epoch'''
     #temp = timestamp_string.split('.')
@@ -29,7 +32,7 @@ def remove_duplicat_price_bidask(nob):
     return bbb.reset_index()
 
 class MockServerRequestHandler(BaseHTTPRequestHandler):
-    time_ind = 0
+
     year=2018
     month=12
     day=3
@@ -47,7 +50,8 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
 
 
     def get_lob(self):
-        filestr = (self.genFileName(self.time_ind))
+        global time_ind
+        filestr = (self.genFileName(time_ind))
         lobfile = self.base_dir+filestr
         print(filestr)
         f = open(lobfile, 'rb')
@@ -56,7 +60,8 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         # trades = pickle
 
     def get_trades(self):
-        filestr = 'trade_'+(self.genFileName(self.time_ind))
+        global time_ind
+        filestr = 'trade_'+(self.genFileName(time_ind))
         tradefile = self.base_dir+filestr
 
         print(filestr)
@@ -92,28 +97,30 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
     def createListFromLobDF(self, lobdf):
         # arrayTrades = np.zeros(len(listTrades), 4)
         blist = []
-        bid_lob = lobdf.loc[lobdf.loc['type']==1]
-        ask_lob = lobdf.loc[lobdf.loc['type']==0]
+        lobdf = remove_duplicat_price_bidask(lobdf)
+        bid_lob = lobdf.loc[lobdf['type']==1].reset_index(drop=True).sort_values(by='price', ascending = False)
+        ask_lob = lobdf.loc[lobdf['type']==0].reset_index(drop=True).sort_values(by='price', ascending = True)
 
         lob = bid_lob
         for x in range(0, lob.shape[0]):
-            lst = [lob.loc[x,'price'], lob.loc[x,'amount'], lob.loc[x,'type'], lob.loc[x,'date']]
+            lst = [lob.loc[x,'price'], lob.loc[x,'amount'], int(lob.loc[x,'type'])]
             blist.append(lst)
         alist = []
         lob = ask_lob
         for x in range(0, lob.shape[0]):
-            lst = [lob.loc[x,'price'], lob.loc[x,'amount'], lob.loc[x,'type'], lob.loc[x,'date']]
+            lst = [lob.loc[x,'price'], lob.loc[x,'amount'], int(lob.loc[x,'type'])]
             alist.append(lst)
-        dic = {'bids':blist, 'asks':alist}
+        dic = {'bids':blist, 'asks':alist, 'current_time': lob.loc[x,'date']}
         return dic
 
     def do_GET(self):
         global g_trade
+        global time_ind
         # Process an HTTP GET request and return a response with an HTTP 200 status.
         self.send_response(requests.codes.ok, "thanks for contacting us")
         self.end_headers()
 
-        print('time ind'+str(self.time_ind))
+        print('time ind'+str(time_ind))
         #response = io.BytesIO()
         #response.write(b'This is POST request. ')
         #response.write(b'Received: ')
@@ -123,13 +130,15 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
 
         else:
             lob = self.get_lob()
-            ltrades = self.createListFromLobDF()
+            ltrades = self.createListFromLobDF(lob)
         s = json.dumps(ltrades)
         if len(ltrades) != 0:
-            print(ltrades[-1])
-
+            if g_trade:
+                print(ltrades[-1])
+            else:
+                print(ltrades['bids'][-1])
         self.wfile.write(s.encode('utf-8'))
-        self.time_ind += 1
+        time_ind += 1
         return
 
 
@@ -152,7 +161,8 @@ class TestMockServer(object):
         if trade:
             cls.mock_server_port = 65269
         else:
-            cls.mock_server_port = 65109
+            cls.mock_server_port = 65110
+        print('using port: ' + str(cls.mock_server_port))
         cls.mock_server = HTTPServer(('localhost', cls.mock_server_port), MockServerRequestHandler)
 
         # Start running mock server in a separate thread.
@@ -186,15 +196,17 @@ if __name__ == "__main__":
         pair = sys.argv[1]
         if len(sys.argv)>2:
             g_trade = sys.argv[1] != 'lob'
+            print('Running as Trade Server')
         # ws = getBitmexWs(sys.argv[1])
     # else:
     #     ws = getBitmexWs(pair)
     t = TestMockServer(pair)
     t.setup_class(g_trade) # if false its a LOB mock service
+    time.sleep(2)
     t.test_request_response()
     while True:
         time.sleep(1)
 
-
+time_ind = 0
 g_trade = None
 pair = ''
