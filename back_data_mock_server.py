@@ -25,11 +25,15 @@ def convert_utc_to_epoch_trades(timestamp_string):
     epoch = timestamp.timestamp()
     return epoch*1000
 
+
+
 def remove_duplicat_price_bidask(nob):
     aaa = nob.reset_index()
     aaa.loc[aaa.type == 1, ['amount']] = aaa[aaa.type == 1].amount * -1
     bbb = aaa.groupby(['price', 'date']).sum()
-    return bbb.reset_index()
+    bbb = bbb.reset_index()
+    bbb.loc[bbb.type == 1, ['amount']] = bbb[bbb.type == 1].amount * -1
+    return bbb
 
 class MockServerRequestHandler(BaseHTTPRequestHandler):
 
