@@ -28,12 +28,10 @@ def convert_utc_to_epoch_trades(timestamp_string):
 
 
 def remove_duplicat_price_bidask(nob):
-    aaa = nob.reset_index()
+    aaa = nob.reset_index(drop=True)
     aaa.loc[aaa.type == 1, ['amount']] = aaa[aaa.type == 1].amount * -1
-    bbb = aaa.groupby(['price', 'date']).sum()
-    bbb = bbb.reset_index()
-    bbb.loc[bbb.type == 1, ['amount']] = bbb[bbb.type == 1].amount * -1
-    return bbb
+    bbb = aaa.groupby(['price']).sum()
+    return bbb.reset_index()
 
 class MockServerRequestHandler(BaseHTTPRequestHandler):
 
@@ -99,22 +97,24 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
         return blist
 
     def createListFromLobDF(self, lobdf):
-        # arrayTrades = np.zeros(len(listTrades), 4)
-        blist = []
+        current_date = lobdf.date.max()
         lobdf = remove_duplicat_price_bidask(lobdf)
-        bid_lob = lobdf.loc[lobdf['type']==1].reset_index(drop=True).sort_values(by='price', ascending = False)
-        ask_lob = lobdf.loc[lobdf['type']==0].reset_index(drop=True).sort_values(by='price', ascending = True)
 
-        lob = bid_lob
-        for x in range(0, lob.shape[0]):
-            lst = [lob.loc[x,'price'], lob.loc[x,'amount'], int(lob.loc[x,'type'])]
-            blist.append(lst)
-        alist = []
-        lob = ask_lob
-        for x in range(0, lob.shape[0]):
-            lst = [lob.loc[x,'price'], lob.loc[x,'amount'], int(lob.loc[x,'type'])]
-            alist.append(lst)
-        dic = {'bids':blist, 'asks':alist, 'current_time': lob.loc[x,'date']}
+        bid_lob = lobdf.loc[lobdf['amount']<0].sort_values(by='price', ascending = False)
+        ask_lob = lobdf.loc[lobdf['amount']>0].sort_values(by='price', ascending = True)
+
+        bid_lob = bid_lob.loc[:,['price', 'amount', 'type']]
+        ask_lob = ask_lob.loc[:, ['price', 'amount', 'type']]
+        # lob = bid_lob
+        # for x in range(0, lob.shape[0]):
+        #     lst = [lob.loc[x,'price'], lob.loc[x,'amount'], int(lob.loc[x,'type'])]
+        #     blist.append(lst)
+        # alist = []
+        # lob = ask_lob
+        # for x in range(0, lob.shape[0]):
+        #     lst = [lob.loc[x,'price'], lob.loc[x,'amount'], int(lob.loc[x,'type'])]
+        #     alist.append(lst)
+        dic = {'bids': bid_lob.values.tolist(), 'asks': ask_lob.values.tolist(), 'current_time': current_date}
         return dic
 
     def do_GET(self):
@@ -200,7 +200,8 @@ if __name__ == "__main__":
         pair = sys.argv[1]
         if len(sys.argv)>2:
             g_trade = sys.argv[1] != 'lob'
-            print('Running as Trade Server')
+            if g_trade:
+                print('Running as Trade Server')
         # ws = getBitmexWs(sys.argv[1])
     # else:
     #     ws = getBitmexWs(pair)

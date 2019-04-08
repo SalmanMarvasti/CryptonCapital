@@ -264,10 +264,10 @@ class PublishServer:
                     ticksaway.append(buy_int * -1*marketorderint)
                     rd = 0.5+random.random()/4
 
-            o.stats[0].number_of_predictions += -1
-            o.stats[1].number_of_predictions += -1
-            o.stats[2].number_of_predictions += -1
-            o.stats[3].number_of_predictions += -1
+            # o.stats[0].number_of_predictions += -1
+            # o.stats[1].number_of_predictions += -1
+            # o.stats[2].number_of_predictions += -1
+            # o.stats[3].number_of_predictions += -1
             mydict = {'id': jl['id'], 'time_to_fill':timetofill, 'cur_mid': o.mid, 'vwap': o.vwap,
                       'valid_for_sec': o.tradewindow_sec*5 , 'timestamp': datetime.datetime.utcnow().timestamp(), 'no_blocks': len(tradearray), 'ticksize': o.tick, 'pair': jl['pair'], 'trade_size': tradearray, 'type': tradetype, 'price': ticksaway[:len(tradearray)],
                       'prob_fill': prob_order_fill, 'alt_prob': alt_prob_order_fill,'pred_price':o.price_prediction,'prediction_stat_winrates':[o.stats[1].number_correct/(o.stats[1].number_of_predictions), o.stats[2].number_correct/o.stats[2].number_of_predictions, o.stats[3].number_correct/o.stats[3].number_of_predictions],

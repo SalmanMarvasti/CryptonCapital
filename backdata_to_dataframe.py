@@ -52,7 +52,8 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
     # df = pd.read_csv(inFile, delimiter=';')
     global count_hist
     global prevdate
-
+    output_path = './ob/' + outFile
+    output_trade = './ob/'+ 'trade_'+outFile
     # df = df.loc[df['update_type'] != 'SNAPSHOT']
 
     new_ot = pd.DataFrame(
@@ -65,12 +66,10 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
 
     # noblookup = dict(zip(new_ob.price.values, new_ob.index.values))
     cur_dates = new_ot['date'].unique()
-    max_date = cur_dates.max()
-    min_date = cur_dates.min()-5
+    min_date = cur_dates.min()
     #condition = trades['time_exchange']>min_date and trades['time_exchange']>max_date
     #trades.loc[condition]
-    cur_trades = trades[min_date-6:max_date+5]
-
+    cur_trades = []
     text_dates = pd.to_datetime(cur_dates, unit='s')
     x = 0
     print('going through dates')
@@ -151,64 +150,84 @@ def return_bids_asks_cointick(inFile, outFile, trades, ot, nob, w,save_plots=Fal
                             if row_to_append.amount != 0 and row_to_append.type == 'SUB':
                                 print('Warning could have negative values here')
                                 nob.loc[p, ['amount']] *=-1
+                if (cdate - prevdate)>22:
+                    nob.loc[:, 'date'] = cdate
+                    nob.sort_index(inplace=True)
+                    print('time diff'+str((cdate - prevdate)))
+                    cur_trades = trades[min_date - 2:cdate + 1]
+                    nob = remove_duplicat_price_bidask(nob)
+                    nob['type'] = (nob['amount']<0).apply(int)
+                    nob['amount'] = np.abs(nob.amount)
+                    nob = nob.loc[nob.amount > 0.1]
+                    nob.set_index(['price', 'type'], inplace=True)
+                    rnob = nob.reset_index()
+                    if count_hist>2000:
+                        save_plots = False # Temp remove TODO
 
-        nob.loc[:,'date'] = cdate
-        nob.sort_index(inplace=True)
-        if (cdate - prevdate)>10:
-            nob = remove_duplicat_price_bidask(nob)
-            nob = nob.loc[nob.amount > 0.1]
-            nob.set_index(['price', 'type'], inplace=True)
-            rnob = nob.reset_index()
-            if count_hist>2000:
-                save_plots = False # Temp remove TODO
+                    if save_plots:
+                        nobprice = rnob.price.values
+                        nobamount = rnob['amount'].values
+                        plt.clf()
+                        mn = min(nobprice)
+                        mx = max(nobprice)
+                        N, hbins, patches = plt.hist(nobprice,bins=np.linspace(mn, mx, int((mx-mn)/0.5)+1), weights=nobamount)
+                        plt.title(str(text_dates[x]) + ' vp')  # +str(inst_vwap(nob))s
+                        colorhistbars(patches, rnob['type'].values)
+                        plt.savefig('./img/hist' + outFile[:-3] + str(count_hist) + '.png')
 
-            if save_plots:
-                nobprice = rnob.price.values
-                nobamount = rnob['amount'].values
-                plt.clf()
-                mn = min(nobprice)
-                mx = max(nobprice)
-                N, hbins, patches = plt.hist(nobprice,bins=np.linspace(mn, mx, int((mx-mn)/0.5)+1), weights=nobamount)
-                plt.title(str(text_dates[x]) + ' vp')  # +str(inst_vwap(nob))s
-                colorhistbars(patches, rnob['type'].values)
-                plt.savefig('./img/hist' + outFile[:-3] + str(count_hist) + '.png')
-                count_hist += 1
-            # w.writerows(rnob.values)
-            # print('writing nob' + str(x)+' '+str(text_dates[x]))
-            prevdate = cdate
+                        nob.to_pickle(output_path[:-4] + str(count_hist))
+                        cur_trades.to_pickle(output_trade[:-4] + str(count_hist))
+                    count_hist += 1
+                    prevdate = cdate
         x = x + 1
+
     return nob,cur_trades
+
 
 def remove_duplicat_price_bidask(nob):
     aaa = nob.reset_index()
-    filter1 = aaa.type == 1
-    aaa.loc[filter1, ['amount']] = aaa[filter1].amount * -1 # make negative so summation would work
-    bbb = aaa.groupby(['price', 'date']).sum()
-    bbb = bbb.reset_index()
-    bbb.loc[bbb.type == 1, ['amount']] = bbb[bbb.type == 1].amount * -1
-    filt = bbb.amount<0
-    if filt.any():
-        ccc=bbb.loc[filt, ['type', 'amount']]
-        ccc.amount*=-1
-        ccc['type'] = (ccc.type+1)%2
-        bbb.loc[filt, ['type', 'amount']] = ccc
-    filter1 = bbb.type == 1
-    filter0 = bbb.type == 0
+    aaa.loc[aaa.type == 1, ['amount']] = aaa[aaa.type == 1].amount * -1
+    bbb = aaa.groupby(['price','date']).sum()
+    filter1 = bbb.amount<0
+    filter0 = bbb.amount>0
     min_len = min(sum(filter0), sum(filter1))
-    if min_len>20:
-        min_len = 20
-    npind1 = filter1.nonzero()[0][0:min_len + 1]
+    if min_len>15:
+        min_len = 15
+    npind1 = filter1.nonzero()[0][0:max(min_len,sum(filter1)-3)  + 1]
     npind0 = filter0.nonzero()[0][0:min_len + 1]
     npind = np.append(npind1, npind0)
     bbb = bbb.iloc[npind, :]
-    return bbb
+    return bbb.reset_index()
+
+# def remove_duplicat_price_bidask(nob):
+#     aaa = nob.reset_index()
+#     filter1 = aaa.type == 1
+#     aaa.loc[filter1, ['amount']] = aaa[filter1].amount * -1 # make negative so summation would work
+#     bbb = aaa.groupby(['price', 'date']).sum()
+#     bbb = bbb.reset_index()
+#     bbb.loc[bbb.type == 1, ['amount']] = bbb[bbb.type == 1].amount * -1
+#     filt = bbb.amount<0
+#     if filt.any():
+#         ccc=bbb.loc[filt, ['type', 'amount']]
+#         ccc.amount*=-1
+#         ccc['type'] = (ccc.type+1)%2
+#         bbb.loc[filt, ['type', 'amount']] = ccc
+#     filter1 = bbb.type == 1
+#     filter0 = bbb.type == 0
+#     min_len = min(sum(filter0), sum(filter1))
+#     if min_len>20:
+#         min_len = 20
+#     npind1 = filter1.nonzero()[0][0:min_len + 1]
+#     npind0 = filter0.nonzero()[0][0:min_len + 1]
+#     npind = np.append(npind1, npind0)
+#     bbb = bbb.iloc[npind, :]
+#     return bbb
 
 
 import time
 def rewrite_cointick_chunk(basepath, lobfile, outFile, save_plots=False):
     first = True
     output_path = './ob/' + outFile
-    output_trade = './ob/'+ 'trade_'+outFile
     inFile = os.path.join(basepath, lobfile)
     tradepath = os.path.join(basepath, 'trades')
     tradefile = os.path.join(tradepath, lobfile)
@@ -239,8 +258,7 @@ def rewrite_cointick_chunk(basepath, lobfile, outFile, save_plots=False):
                 df = df.loc[df['update_type'] != 'SNAPSHOT']
                 nob.sort_index(inplace=True)
             nob,curtrade = return_bids_asks_cointick(inFile,outFile,trade_df, df,nob,file,save_plots)
-            nob.to_pickle(output_path[:-4]+str(countn))
-            curtrade.to_pickle(output_trade[:-4]+str(countn))
+
             countn +=1
             if(countn%5==0):
                 etime = time.time()
