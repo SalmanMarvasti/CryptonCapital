@@ -118,13 +118,13 @@ class prediction_checker:
             if timestamp<a[0]:
                 if abs(price-a[1])<tick*0.5 or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
                     self.number_correct+=1
-                    entry_price = a[1]-a[2]
+                    entry_price = a[6]
                     gain_amount = max(abs(a[2]),abs(price-entry_price))
                     self.dollar_gain+=gain_amount
                     self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET, gain_amount))
                 else:
                     timepassed = timestamp-a[0]+self.FIXED_OFFSET
-                    entry_price = a[1] -a[2]
+                    entry_price = a[6]
                     if a[2]<0: # gone short
                         price_loss = entry_price - price
                     else: # gone long
@@ -164,7 +164,7 @@ class prediction_checker:
 
         if len(self.predlist)>self.max_capital_deployed:
             self.max_capital_deployed = len(self.predlist)
-        entry_price = predicted_price - price_diff
+        entry_price = mid
         if price_diff < 0:  # gone short
             stoploss = entry_price + 0.8*abs(price_diff)
         else:  # gone long
@@ -420,7 +420,7 @@ class modellingmanager(modelob):
                     price_prediction = self.down_price+4
                     signal = -1
                     self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-4,
-                                       price_diff-4, prob_diff, sma, self.mid)
+                                  price_diff-4, prob_diff, sma, self.mid)
                 self.last_pred_time = current_time
 
         if ask_prob > bid_prob + thresh:
@@ -436,7 +436,7 @@ class modellingmanager(modelob):
                     self.up_pred_count = 0
                 netcount = self.up_pred_count + self.down_pred_count
                 if  (netcount> 4 and netcount<30 or abs(prob_diff)>0.9) and (sma>self.mid): # or abs(sma-self.mid)<self.tick
-                    price_prediction = self.up_price+4
+                    price_prediction = self.up_price
                     signal = 1
                     self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction+4,
                                        price_diff+4, prob_diff, sma, self.mid)
