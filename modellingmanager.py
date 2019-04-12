@@ -417,7 +417,7 @@ class modellingmanager(modelob):
                     self.down_pred_count = 0
                 netcount = self.up_pred_count + self.down_pred_count
                 if (netcount <-4 and netcount > -30  or abs(prob_diff)>0.9)and (sma<self.mid ): #or abs(sma-self.mid)<self.tick
-                    price_prediction = self.down_price+4
+                    price_prediction = self.down_price
                     signal = -1
                     self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-4,
                                   price_diff-4, prob_diff, sma, self.mid)
