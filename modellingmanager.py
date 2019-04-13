@@ -119,7 +119,7 @@ class prediction_checker:
                 if abs(price-a[1])<tick*0.5 or (a[2]>0 and price>a[1]) or (a[2]<0 and price<a[1]):
                     self.number_correct+=1
                     entry_price = a[6]
-                    gain_amount = max(abs(a[2]),abs(price-entry_price))
+                    gain_amount = abs(a[2])+tick #max(abs(a[2]),abs(price-entry_price))
                     self.dollar_gain+=gain_amount
                     self.filledlist.append((a, timestamp - a[0] + self.FIXED_OFFSET, gain_amount))
                 else:
@@ -138,7 +138,8 @@ class prediction_checker:
                         #self.cost+=
                     else: # keep order for now
                         if price_loss>1 and abs(price - a[4])>2: # we are making profit but not achieved target
-                            a = (a[0], a[1], a[2], a[3], a[4] + price_loss*a[2]/abs(a[2]), a[5],a[6])
+                            logging.info('STOP************** adjusded')
+                            a = (a[0], a[1], a[2], a[3], a[4] + price_loss*a[2]/abs(a[2]), a[5],a[6], a[7])
 
                         newlist.append(a)
             else:
@@ -157,7 +158,7 @@ class prediction_checker:
 
     def __len__(self):
         return self.number_of_predictions
-    def add_pred(self, validtill_timestamp, predicted_price, price_diff, confidence=0, sma=0, mid=0):
+    def add_pred(self, validtill_timestamp, predicted_price, price_diff, confidence=0, sma=0, mid=0, rsi=0):
         if len(self.predlist)>0 and abs(predicted_price - self.predlist[-1][1])<(self.tick):
             print('ignoring duplicate prediction')
             return
@@ -166,11 +167,11 @@ class prediction_checker:
             self.max_capital_deployed = len(self.predlist)
         entry_price = mid
         if price_diff < 0:  # gone short
-            stoploss = entry_price + 0.8*abs(price_diff)
+            stoploss = entry_price + abs(price_diff) + self.tick
         else:  # gone long
-            stoploss = entry_price -  0.8*abs(price_diff)
+            stoploss = entry_price -  abs(price_diff) + self.tick
 
-        self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid))
+        self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi))
         self.number_of_predictions+=1
         if validtill_timestamp>self.time_end:
             self.time_end=validtill_timestamp
@@ -397,30 +398,38 @@ class modellingmanager(modelob):
         self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
         self.asks[:, 3] = np.ones(len(self.asks))
 
-    def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, up_price, down_price, thresh, sma):
+    def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, up_price, down_price, thresh, sma, rsi=0):
         up = -1
         signal = 0
         self.stats[x].thresh = thresh
         timediff = current_time - self.last_pred_time
+        netcount = self.up_pred_count + self.down_pred_count
+
         if bid_prob > ask_prob + thresh:  # and (abs(diffg) > thresh*0.5 or abs(diffg)<0.05)
             print('price falling')
             up = 0
             price_prediction = down_price
             price_diff = price_prediction - self.mid
+            abs_diff = abs(prob_diff)
 
-            if abs(price_diff) > 1.1:
-                if timediff<1000:
+
+            if abs_diff > 1.1 and abs_diff < 40:
+                if timediff<300:
                     self.down_pred_count += price_diff
                     logging.info('down_count' + str(self.down_pred_count))
                 else:
-                    print('reset downpredcount')
-                    self.down_pred_count = 0
-                netcount = self.up_pred_count + self.down_pred_count
-                if (netcount <-4 and netcount > -30  or abs(prob_diff)>0.9)and (sma<self.mid ): #or abs(sma-self.mid)<self.tick
-                    price_prediction = self.down_price
+                    if netcount>0:
+                        print('reset downpredcount')
+                        self.down_pred_count = 0
+                        self.up_pred_count = 0
+
+
+                if ( netcount < -4 and netcount > -30 and (sma + self.dollar_unit_cost) < self.mid ) or (netcount>50 and abs(prob_diff) > 0.5 and self.mid > sma):  # or abs(sma-self.mid)<self.tick
+                    #price_prediction = self.down_price
                     signal = -1
+                    move_amount = max(0.2 * abs(netcount), 4)
                     self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-4,
-                                  price_diff-4, prob_diff, sma, self.mid)
+                                  price_diff-move_amount, prob_diff, sma, self.mid, rsi)
                 self.last_pred_time = current_time
 
         if ask_prob > bid_prob + thresh:
@@ -428,18 +437,22 @@ class modellingmanager(modelob):
             up = 1
             price_prediction = up_price
             price_diff = price_prediction - self.mid
-            if abs(price_diff) > 1.1:
-                if  timediff< 1000:
+            abs_diff = abs(price_diff)
+            if abs(price_diff) > 1.1 and abs_diff < 40:
+                if  timediff< 300:
                     self.up_pred_count += price_diff
                     logging.info('up count '+str(self.up_pred_count)+' '+str(self.up_pred_count+self.down_pred_count))
                 else:
-                    self.up_pred_count = 0
-                netcount = self.up_pred_count + self.down_pred_count
-                if  (netcount> 4 and netcount<30 or abs(prob_diff)>0.9) and (sma>self.mid): # or abs(sma-self.mid)<self.tick
-                    price_prediction = self.up_price
+                    if netcount<0:
+                        self.up_pred_count = 0
+                        self.down_pred_count = 0
+                if  (netcount> 4 and netcount<30 ) and (sma - self.dollar_unit_cost >self.mid or (netcount>50 and abs(prob_diff)> 0.5 and self.mid < sma)):
+                # or abs(sma-self.mid)<self.tick
+                    #price_prediction = self.up_price
                     signal = 1
-                    self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction+4,
-                                       price_diff+4, prob_diff, sma, self.mid)
+                    move_amount = max(0.2*netcount,4)
+                    self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction+move_amount,
+                                       price_diff+move_amount, prob_diff, sma, self.mid, rsi)
                 self.last_pred_time = current_time
         if up==-1 and int(current_time)%prediction_checker.FIXED_OFFSET<self.tradewindow_sec:
             self.up_pred_count = 0
@@ -608,7 +621,7 @@ class modellingmanager(modelob):
             if self.bids.shape[0]>20:
                 R = 10
             self.bids = self.bids[np.append(self.bids[0:R, 1] > 0, ~np.isnan(self.bids[R:, 1]))]
-        max_R = min(min(self.asks.shape[0], 5), self.bids.shape[0])
+        max_R = min(min(self.asks.shape[0], 6), self.bids.shape[0])
         sum_range = range(0, max_R)
         sum_bids = self.bids[sum_range, :].sum(axis=0)
         sum_asks = self.asks[sum_range, :].sum(axis=0)
@@ -784,19 +797,20 @@ class modellingmanager(modelob):
             ask_prob, atimetofill = self.probordercompletion2(self.forcast_estimate_time, 1)
             bid_gmean = self.probordercompletion(self.forcast_estimate_time, 0)
             ask_gmean = self.probordercompletion(self.forcast_estimate_time, 1)
+            rsi_ind = (RSI(pd.Series(self.mid_hist), 7))[-1]
             if self.bid_gmean > 0.4 or self.ask_gmean > 0.4:
                 R = 7 # should be 7 for this version
                 bvwap, avwap, totala, totalb = calc_vwap(self.bids, self.asks, R, self.mid)
                 self.up_price = avwap
                 self.down_price = bvwap
-            thresh = 0.19
+            thresh = 0.21
             self.price_prediction = self.mid
             diffg = bid_prob - ask_prob
 
             signal2 = 0
             signal1 = 0
             sma = np.mean(self.mid_hist)
-            up, signal1 = self.predict_and_simtrade(current_time, bid_prob, ask_prob, diffg, 0,self.up_price, self.down_price, thresh, sma)
+            up, signal1 = self.predict_and_simtrade(current_time, bid_prob, ask_prob, diffg, 0,self.up_price, self.down_price, thresh, sma, rsi_ind)
 
             if(up==1):
                 self.price_prediction = self.up_price + 4
@@ -806,16 +820,16 @@ class modellingmanager(modelob):
 
 
             self.confidence = abs(ask_prob - bid_prob)
-            thresh=0.20
-            if ask_gmean>0.1 and bid_gmean>0.1 and self.confidence>0.19:
-                up, signal2 = self.predict_and_simtrade(current_time, bid_gmean, ask_gmean, diffg, 3, self.up_price_2, self.down_price_2,thresh, sma)
+            thresh=0.21
+            if (ask_gmean>0.1and bid_gmean>0.1) and self.confidence>0.18:
+                up, signal2 = self.predict_and_simtrade(current_time, bid_gmean, ask_gmean, diffg, 3, self.up_price_2, self.down_price_2,thresh, sma, rsi_ind)
                 if(up==1):
                     self.price_prediction = self.up_price_2 + 4
                 else:
                     if up==0:
                         self.price_prediction = self.down_price_2 - 4
 
-            rsi_ind =  (RSI(pd.Series(self.mid_hist), 7))[-1]
+
             nn = np.array([[current_time * 1000, self.mid, prob_blo_live, prob_alo_live,
                             bid_prob,ask_prob,bid_gmean,ask_gmean, btimetofill[0], atimetofill[0],self.price_prediction, self.up_pred_count+self.down_pred_count, sma, rsi_ind , signal2]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
