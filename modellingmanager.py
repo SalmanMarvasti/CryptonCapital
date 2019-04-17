@@ -80,7 +80,7 @@ FIXTIC = 0.015625
 
 class prediction_checker:
     FIXED_OFFSET = 1000
-    def __init__(self, thresh=0.2, percent_cost = 0.0008):
+    def __init__(self, thresh=0.2, percent_cost = 0.0008, tradepair='XBTUSD'):
         self.predlist = []
         self.number_of_predictions = 1 # prevent divide by zero erros
         self.number_correct = 0
@@ -98,6 +98,8 @@ class prediction_checker:
         self.max_capital_deployed = 0
         self.cost = 0
         self.percent_cost = percent_cost
+        self.filepath = './'
+        self.tradingpair = tradepair
 
     def get_average_time_to_fill(self):
         total = 0
@@ -137,8 +139,8 @@ class prediction_checker:
                         self.stoppedlist.append((a,  timepassed, -1*loss_amount))
                         #self.cost+=
                     else: # keep order for now
-                        if price_loss>1 and abs(price - a[4])>2: # we are making profit but not achieved target
-                            logging.info('STOP************** adjusded')
+                        if price_loss>4 and abs(price - a[4])>2: # we are making profit but not achieved target
+                            logging.info('STOP************** adjusted')
                             a = (a[0], a[1], a[2], a[3], a[4] + price_loss*a[2]/abs(a[2]), a[5],a[6], a[7])
 
                         newlist.append(a)
@@ -172,6 +174,9 @@ class prediction_checker:
             stoploss = entry_price -  abs(price_diff) + self.tick
 
         self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi))
+        with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
+                          overwrite=True) as output:
+            output.write(pickle.dumps(self.predlist))
         self.number_of_predictions+=1
         if validtill_timestamp>self.time_end:
             self.time_end=validtill_timestamp
@@ -189,7 +194,7 @@ class modelob:
         self.latestob = {}
         self.tradewindow_sec = 29
         self.epsi=0.00000000001
-        self.stats = [prediction_checker(0.2), prediction_checker(0.3), prediction_checker(0.4), prediction_checker(0.5)]
+        self.stats = [prediction_checker(thresh=0.2, tradepair=self.tradingpair), prediction_checker(0.3), prediction_checker(0.4), prediction_checker(thresh=0.2, tradepair=self.tradingpair)]
 
         if self.market =='Binance':
             self.updateurl = "https://api.binance.com/api/v1/depth?symbol={0}"
@@ -206,6 +211,11 @@ class modelob:
             self.tradeeurl = 'http://localhost:{port}/users'.format(port=53581)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.backup_tradeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
+            self.tradewindow_sec = 24  #
+        if self.market.lower() =='bitmexws_testnet':
+            self.tradeeurl = 'http://localhost:{port}/users'.format(port=53581)
+            self.updateurl = "https://testnet.bitmex.com/api/bitcoincharts/{0}/orderBook"
+            self.backup_tradeurl = "https://testnet.bitmex.com/api/bitcoincharts/{0}/trades"
             self.tradewindow_sec = 24  #
         if self.market.lower() == 'backtest_bitmexws':
             self.tradeeurl = 'http://localhost:{port}/users'.format(port=65269)
@@ -396,7 +406,11 @@ class modellingmanager(modelob):
         # savebids = np.column_stack([self.bids,np.zeros(len(self.bids)) ])
 
         self.asks = convert_to_ndarray(latest_ob['asks'], current_time)
-        self.asks[:, 3] = np.ones(len(self.asks))
+        self.asks[:, 3] = np.ones(len(self.asks) )
+
+    def reset_pred(self):
+        self.up_pred_count = 0
+        self.down_pred_count = 0
 
     def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, up_price, down_price, thresh, sma, rsi=0):
         up = -1
@@ -410,25 +424,27 @@ class modellingmanager(modelob):
             up = 0
             price_prediction = down_price
             price_diff = price_prediction - self.mid
-            abs_diff = abs(prob_diff)
+            abs_price_diff = abs(price_diff)
 
 
-            if abs_diff > 1.1 and abs_diff < 40:
+            if abs_price_diff > 1.1 and abs_price_diff < 40:
                 if timediff<300:
+                    if netcount>50 and ask_prob-bid_prob>0.8:
+                        self.reset_pred()
                     self.down_pred_count += price_diff
                     logging.info('down_count' + str(self.down_pred_count))
                 else:
                     if netcount>0:
                         print('reset downpredcount')
-                        self.down_pred_count = 0
+                        self.down_pred_count = price_diff
                         self.up_pred_count = 0
 
 
                 if ( netcount < -4 and netcount > -30 and (sma + self.dollar_unit_cost) < self.mid ) or (netcount>50 and abs(prob_diff) > 0.5 and self.mid > sma):  # or abs(sma-self.mid)<self.tick
                     #price_prediction = self.down_price
                     signal = -1
-                    move_amount = max(0.2 * abs(netcount), 4)
-                    self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-4,
+                    move_amount = max(0.1 * abs(netcount), 1)
+                    self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-move_amount,
                                   price_diff-move_amount, prob_diff, sma, self.mid, rsi)
                 self.last_pred_time = current_time
 
@@ -437,32 +453,35 @@ class modellingmanager(modelob):
             up = 1
             price_prediction = up_price
             price_diff = price_prediction - self.mid
-            abs_diff = abs(price_diff)
-            if abs(price_diff) > 1.1 and abs_diff < 40:
+            abs_price_diff = abs(price_diff)
+            if abs_price_diff > 1.1 and abs_price_diff < 40:
                 if  timediff< 300:
+                    if netcount<-50 and bid_prob-ask_prob>0.8:
+                        self.reset_pred()
+
                     self.up_pred_count += price_diff
                     logging.info('up count '+str(self.up_pred_count)+' '+str(self.up_pred_count+self.down_pred_count))
                 else:
                     if netcount<0:
-                        self.up_pred_count = 0
+                        self.up_pred_count = price_diff
                         self.down_pred_count = 0
-                if  (netcount> 4 and netcount<30 ) and (sma - self.dollar_unit_cost >self.mid or (netcount>50 and abs(prob_diff)> 0.5 and self.mid < sma)):
+                if  (netcount> 4 and netcount<30 ) and (sma - self.dollar_unit_cost >self.mid or (netcount>50 and abs(prob_diff)> 0.5 and self.mid < sma) or (netcount>100 and abs(prob_diff)>0.8 and rsi <52)):
                 # or abs(sma-self.mid)<self.tick
                     #price_prediction = self.up_price
                     signal = 1
-                    move_amount = max(0.2*netcount,4)
+                    move_amount = max(0.1*netcount,1)
                     self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction+move_amount,
                                        price_diff+move_amount, prob_diff, sma, self.mid, rsi)
                 self.last_pred_time = current_time
-        if up==-1 and int(current_time)%prediction_checker.FIXED_OFFSET<self.tradewindow_sec:
-            self.up_pred_count = 0
-            self.down_pred_count = 0
+        # if up==-1 and int(current_time)%prediction_checker.FIXED_OFFSET<self.tradewindow_sec:
+        #     self.up_pred_count = 0
+        #     self.down_pred_count = 0
 
 
         return up, signal
 
     def getmarketorders_frombackupapi(self, mid):
-        current_time = time.time()
+        current_time = dt.datetime.utcnow().timestamp()
         market_order_buy_sum = [-1, -1]
         market_order_sell_sum =[-1, -1]
         try:
@@ -797,7 +816,7 @@ class modellingmanager(modelob):
             ask_prob, atimetofill = self.probordercompletion2(self.forcast_estimate_time, 1)
             bid_gmean = self.probordercompletion(self.forcast_estimate_time, 0)
             ask_gmean = self.probordercompletion(self.forcast_estimate_time, 1)
-            rsi_ind = (RSI(pd.Series(self.mid_hist), 7))[-1]
+            rsi_ind = (RSI(pd.Series(self.mid_hist), 12))[-1]
             if self.bid_gmean > 0.4 or self.ask_gmean > 0.4:
                 R = 7 # should be 7 for this version
                 bvwap, avwap, totala, totalb = calc_vwap(self.bids, self.asks, R, self.mid)
@@ -820,14 +839,14 @@ class modellingmanager(modelob):
 
 
             self.confidence = abs(ask_prob - bid_prob)
-            thresh=0.21
-            if (ask_gmean>0.1and bid_gmean>0.1) and self.confidence>0.18:
-                up, signal2 = self.predict_and_simtrade(current_time, bid_gmean, ask_gmean, diffg, 3, self.up_price_2, self.down_price_2,thresh, sma, rsi_ind)
-                if(up==1):
-                    self.price_prediction = self.up_price_2 + 4
-                else:
-                    if up==0:
-                        self.price_prediction = self.down_price_2 - 4
+            # thresh=0.21
+            # if (ask_gmean>0.1and bid_gmean>0.1) and self.confidence>0.18:
+            #     up, signal2 = self.predict_and_simtrade(current_time, bid_gmean, ask_gmean, diffg, 3, self.up_price_2, self.down_price_2,thresh, sma, rsi_ind)
+            #     if(up==1):
+            #         self.price_prediction = self.up_price_2 + 4
+            #     else:
+            #         if up==0:
+            #             self.price_prediction = self.down_price_2 - 4
 
 
             nn = np.array([[current_time * 1000, self.mid, prob_blo_live, prob_alo_live,
@@ -1002,12 +1021,12 @@ if __name__ == "__main__":
 
 
     if exchange is None:
-        exchange = 'bitmexws'
+        exchange = 'bitmexws_testnet'
         print('setting default exchange '+exchange)
     if name is not None:
         tp.name = name
     else:
-        if exchange.lower() in ('bitmex', 'bitmexws', 'backtest_bitmexws'):
+        if exchange.lower() in ('bitmex', 'bitmexws', 'backtest_bitmexws', 'bitmexws_testnet'):
             tp.name = 'XBTUSD'  #'XBTUSD'
         else:
             tp.name = 'LTCUSDT' # for other exchanges
