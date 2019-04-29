@@ -1,9 +1,17 @@
 import sys
+from time import sleep
+
 import pandas as pd
 from market_maker.market_maker import OrderManager
 import pickle
 import uuid
 import base64
+import logging
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename='./custom_strategy.log',
+                    filemode='w')
 
 def prepareAndSetID(order, order2, order3=[]):
     str = base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
@@ -27,6 +35,7 @@ class CustomOrderManager(OrderManager):
 
         buy_orders = []
         sell_orders = []
+        sleep(1)
 
         # populate buy and sell orders, e.g.
         print("placing new ")
@@ -46,10 +55,11 @@ class CustomOrderManager(OrderManager):
 
         avg_price = 0
         avg_diff = 0
+        avg_stop = 0
         mid = 0
         predicted_price = 0
         stoploss = 0
-        qty = 1000
+        qty = 200
         for i in range(len(list)-1, -1, -1):
             tmp_dict = list[i]
             count = count + 1
@@ -81,29 +91,31 @@ class CustomOrderManager(OrderManager):
 
             avg_diff+=price_diff
             avg_price+=mid
+            avg_stop += stoploss
         if count == 0:
             count = 1
         price_diff = avg_price/count
+        stoploss = avg_stop/count
         if abs(mid - avg_price/count)<5:
-            print('avg mid ok setting avg mid')
+            logging.info('avg mid ok setting avg mid')
             mid = avg_price/count
 
 
 
         if price_diff>2:
             if mid <= actual_mid:
-                print('++++++++++going long')
+                logging.info('++++++++++going long stop:'+str(stoploss)+' target:'+str(predicted_price))
                 buy_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(mid)-1, 'orderQty': qty, 'side': "Buy"})
                 sell_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate, ReduceOnly','ordType':'LimitIfTouched','stopPx': round(predicted_price)-0.5, 'price': round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})
-                sell_orders.append({ 'execInst':'LastPrice, ReduceOnly', 'ordType':'StopLimit', 'stopPx':round(stoploss),'orderQty': qty,  'price': round(stoploss) - 1,  'side': "Sell"})
+                sell_orders.append({ 'execInst':'LastPrice, ReduceOnly', 'ordType':'StopLimit', 'stopPx':round(stoploss),'orderQty': qty,  'price': round(stoploss) - count,  'side': "Sell"})
                 prepareAndSetID(buy_orders, sell_orders, sell_orders)
 
         if price_diff<-2:
             if mid >= actual_mid:
-                print('------------going short')
+                logging.info('-------going short mid, short:'+str(mid)+' '+str(stoploss)+' target:'+str(predicted_price))
                 sell_orders.append({'execInst':'ParticipateDoNotInitiate', 'price': round(mid)+1, 'orderQty':qty, 'side': "Sell"})
                 buy_orders.append({'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'LimitIfTouched','stopPx': round(predicted_price)+1.5, 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})
-                buy_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate,ReduceOnly', 'ordType':'StopLimit', 'stopPx' : round(stoploss)-0.5,'orderQty': qty,  'price': round(stoploss) + 1,'side': "Buy"})
+                buy_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate,ReduceOnly', 'ordType':'StopLimit', 'stopPx' : round(stoploss)-0.5,'orderQty': qty,  'price': round(stoploss) + count,'side': "Buy"})
                 prepareAndSetID(buy_orders, sell_orders, buy_orders)
 
 

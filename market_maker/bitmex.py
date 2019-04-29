@@ -338,6 +338,8 @@ class BitMEX(object):
                 elif 'insufficient available balance' in message:
                     self.logger.error('Account out of funds. The message: %s' % error['message'])
                     exit_or_throw(Exception('Insufficient Funds'))
+                else:
+                    return []
 
 
             # If we haven't returned or re-raised yet, we get here.

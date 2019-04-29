@@ -157,6 +157,9 @@ class prediction_checker:
                 self.expiredlist.append((a, change_amount))
                 self.cost +=self.percent_cost*price
         self.predlist = newlist
+        with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
+                          overwrite=True) as output:
+            output.write(pickle.dumps(self.predlist))
 
     def __len__(self):
         return self.number_of_predictions
@@ -171,7 +174,7 @@ class prediction_checker:
         if price_diff < 0:  # gone short
             stoploss = entry_price + abs(price_diff) + self.tick
         else:  # gone long
-            stoploss = entry_price -  abs(price_diff) + self.tick
+            stoploss = entry_price -  abs(price_diff) - self.tick
 
         self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi))
         with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
@@ -239,7 +242,7 @@ class modelob:
         self.df = pd.DataFrame()
         self.filepath = './'    #'C:\\work\\Crypton\\CryptonCapital_alternative\\'
         # static const variables
-        self.forcast_estimate_time = 90
+        self.forcast_estimate_time = 60
         self.probfmt = '%2.9f'
         self.SAVEDEBUG = True
         self.buy_sum=deque([], maxlen=6)
@@ -393,10 +396,14 @@ class modellingmanager(modelob):
         n = timeframe
         if (isask and len(self.alo_probs)==0) or (len(self.blo_probs)==0 and not isask):
             return 0
+        prob = 0
         if isask:
-            return (1-np.power(self.geo_mean_overflow(self.alo_probs),n))  # here
+            prob = (1-np.power(self.geo_mean_overflow(self.alo_probs),n))  # here
         else:
-            return (1-np.power(self.geo_mean_overflow(self.blo_probs),n))
+            prob =  (1-np.power(self.geo_mean_overflow(self.blo_probs),n))
+            if prob<0:
+                prob = 0
+        return prob
 
 
     def set_lob_data(self, current_time, latest_ob ):
@@ -412,7 +419,7 @@ class modellingmanager(modelob):
         self.up_pred_count = 0
         self.down_pred_count = 0
 
-    def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, up_price, down_price, thresh, sma, rsi=0):
+    def predict_and_simtrade(self, current_time, bid_prob, ask_prob, prob_diff, x, up_price, down_price, thresh, sma, bid_gmean, ask_gmean, rsi=0):
         up = -1
         signal = 0
         self.stats[x].thresh = thresh
@@ -429,7 +436,7 @@ class modellingmanager(modelob):
 
             if abs_price_diff > 1.1 and abs_price_diff < 40:
                 if timediff<300:
-                    if netcount>50 and ask_prob-bid_prob>0.8:
+                    if netcount>50 and (bid_prob-ask_prob)>0.7:
                         self.reset_pred()
                     self.down_pred_count += price_diff
                     logging.info('down_count' + str(self.down_pred_count))
@@ -439,15 +446,18 @@ class modellingmanager(modelob):
                         self.down_pred_count = price_diff
                         self.up_pred_count = 0
 
-
-                if ( netcount < -4 and netcount > -30 and (sma + self.dollar_unit_cost) < self.mid ) or (netcount>50 and abs(prob_diff) > 0.5 and self.mid > sma):  # or abs(sma-self.mid)<self.tick
-                    #price_prediction = self.down_price
+                if ( netcount < -4 and netcount > -30 and (sma + self.dollar_unit_cost) < self.mid ) \
+                        or \
+                        (netcount<-50 and abs(prob_diff) > 0.5 and self.mid > sma and rsi>60):  # or abs(sma-self.mid)<self.tick
                     signal = -1
                     move_amount = max(0.1 * abs(netcount), 1)
                     self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-move_amount,
                                   price_diff-move_amount, prob_diff, sma, self.mid, rsi)
                 self.last_pred_time = current_time
 
+        if rsi<29 and rsi>20 and ask_prob > 0.7 and sma > self.mid and ask_gmean>bid_gmean+0.06:
+            logging.info('changing thresh to 0.05')
+            thresh = 0.05
         if ask_prob > bid_prob + thresh:
             print('price rising')
             up = 1
@@ -456,7 +466,7 @@ class modellingmanager(modelob):
             abs_price_diff = abs(price_diff)
             if abs_price_diff > 1.1 and abs_price_diff < 40:
                 if  timediff< 300:
-                    if netcount<-50 and bid_prob-ask_prob>0.8:
+                    if netcount<-50 and (ask_prob-bid_prob)>0.7:
                         self.reset_pred()
 
                     self.up_pred_count += price_diff
@@ -465,7 +475,9 @@ class modellingmanager(modelob):
                     if netcount<0:
                         self.up_pred_count = price_diff
                         self.down_pred_count = 0
-                if  (netcount> 4 and netcount<30 ) and (sma - self.dollar_unit_cost >self.mid or (netcount>50 and abs(prob_diff)> 0.5 and self.mid < sma) or (netcount>100 and abs(prob_diff)>0.8 and rsi <52)):
+                if  (netcount> 4 and netcount<30 and rsi<50) and (sma - self.dollar_unit_cost >self.mid or (netcount>50 and abs(prob_diff)> 0.5 and self.mid < sma) or
+                                                        (netcount>100 and abs(prob_diff)>0.8 and rsi <50))\
+                        :
                 # or abs(sma-self.mid)<self.tick
                     #price_prediction = self.up_price
                     signal = 1
@@ -521,7 +533,7 @@ class modellingmanager(modelob):
 
 
     def findaskpos(self, nfs_df):
-        pos = 5
+        pos = 2
         while nfs_df[pos,0]==0:
             pos = pos+1
         for i in range(int(pos), nfs_df.shape[0]):
@@ -556,6 +568,10 @@ class modellingmanager(modelob):
                         self.asks = self.asks[0:min_size,:]
                 # self.asks[:,3] = np.ones(len(self.asks))
                 self.mid = (self.asks[0, 0] + self.bids[0, 0]) * 0.5
+                if len(self.mid_hist)<2:
+                    for mi in range(0,60):
+                        self.mid_hist.append(self.mid+1)
+
                 # self.mid_hist.append(self.mid)
                 R = 6 # todo try 12
                 (bvwap, avwap, totala, totalb) = calc_vwap(self.bids, self.asks,R, self.mid)
@@ -640,14 +656,14 @@ class modellingmanager(modelob):
             if self.bids.shape[0]>20:
                 R = 10
             self.bids = self.bids[np.append(self.bids[0:R, 1] > 0, ~np.isnan(self.bids[R:, 1]))]
-        max_R = min(min(self.asks.shape[0], 6), self.bids.shape[0])
+        max_R = min(min(self.asks.shape[0], 7), self.bids.shape[0])
         sum_range = range(0, max_R)
         sum_bids = self.bids[sum_range, :].sum(axis=0)
         sum_asks = self.asks[sum_range, :].sum(axis=0)
         bid_adjust = 0
         ask_adjust = 0
         if self.adjust:
-            nfs_range = range(1, R-1)  # divide top by two
+            nfs_range = range(1, max_R-1)  # divide top by two
             if(len(self.orderadjustments_bid)>1):
                  bid_adjust = np.mean(self.orderadjustments_bid, axis=0)[nfs_range].sum()
                  ask_adjust = np.mean(self.orderadjustments_ask, axis=0)[nfs_range].sum()
@@ -676,12 +692,15 @@ class modellingmanager(modelob):
         if timepassed<100:
             self.tick = self.choosetick(tick_do/2, tick/3)
 
-        for st in self.stats:
-            st.update(self.mid,current_time, self.tick)
+        #for st in self.stats:
+
+        self.stats[0].update(self.mid,current_time, self.tick)
         if (self.backtest):
             bin_tick = 0.5
         else:
             bin_tick = 2*self.tick
+        if self.adjust:
+            bin_tick = 1
         self.bins = np.arange(dfbids['price'].min(), dfasks['price'].max(), bin_tick)
         # if self.tradingpair.upper()=='XBTUSD':
         #     if self.tick<0.5:
@@ -724,7 +743,12 @@ class modellingmanager(modelob):
                 if self.backtest:
                     ask_pos  = self.findaskpos(nfs_np)
                 else:
-                    ask_pos = 12
+                    if nfs_df.shape[0]>20:
+                        ask_pos = 12
+                    else:
+                        ask_pos = self.findaskpos(nfs_np)
+
+
 
                 if buy_marketorder_sum < self.nfs_hist[-1][ask_pos,1]:
                     orderarrival_ask = net_rate[ask_pos] + avg_buy_sum
@@ -746,6 +770,7 @@ class modellingmanager(modelob):
 
         except Exception as e:
             print('Exception NFS' + str(e))
+            self.nfs_hist.clear()
         self.df = nfs_df
         sell_order_per_sec = sell_marketorder_sum/self.tradewindow_sec
         buy_order_per_sec = buy_marketorder_sum/self.tradewindow_sec
@@ -784,6 +809,7 @@ class modellingmanager(modelob):
             logging.info('Warning asks prob could be negative')
             self.orderarrival_ask = 0
 
+        print(str(sum_bids[1])+':'+str(sell_order_per_sec))
         prob_blo_live = (sum_bids[1] + bid_adjust + self.orderarrival_bid - sell_order_per_sec)/(bid_adjust+sum_bids[1] + self.orderarrival_bid)
         prob_alo_live = (sum_asks[1] + ask_adjust + self.orderarrival_ask - buy_order_per_sec) / (ask_adjust+sum_asks[1] + self.orderarrival_ask)
         try:
@@ -802,7 +828,10 @@ class modellingmanager(modelob):
                         prob_blo_live = np.mean(self.blo_probs)
         except Exception as e:
             logging.exception('prob_blo NEGATIVE:'+str(e))
-
+            if prob_blo_live<0:
+                prob_blo_live = 0.5
+            if prob_alo_live < 0:
+                prob_alo_live = 0.5
 
         floatfmt = '%30.9f'
         timefmt = '%30.3f'
@@ -829,13 +858,12 @@ class modellingmanager(modelob):
             signal2 = 0
             signal1 = 0
             sma = np.mean(self.mid_hist)
-            up, signal1 = self.predict_and_simtrade(current_time, bid_prob, ask_prob, diffg, 0,self.up_price, self.down_price, thresh, sma, rsi_ind)
-
+            up, signal1 = self.predict_and_simtrade(current_time, bid_prob, ask_prob, diffg, 0,self.up_price, self.down_price, thresh, sma, bid_gmean, ask_gmean, rsi_ind)
             if(up==1):
-                self.price_prediction = self.up_price + 4
+                self.price_prediction = self.up_price + 1.5
             else:
                 if up==0:
-                    self.price_prediction = self.down_price - 4
+                    self.price_prediction = self.down_price - 1.5
 
 
             self.confidence = abs(ask_prob - bid_prob)
@@ -850,7 +878,7 @@ class modellingmanager(modelob):
 
 
             nn = np.array([[current_time * 1000, self.mid, prob_blo_live, prob_alo_live,
-                            bid_prob,ask_prob,bid_gmean,ask_gmean, btimetofill[0], atimetofill[0],self.price_prediction, self.up_pred_count+self.down_pred_count, sma, rsi_ind , signal2]])
+                            bid_prob,ask_prob,bid_gmean,ask_gmean, btimetofill[0], atimetofill[0],self.price_prediction, self.up_pred_count+self.down_pred_count, sma, rsi_ind , signal2 or signal1]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, fmt=nnfmt, delimiter=',')
             pfile.flush()
@@ -1021,7 +1049,7 @@ if __name__ == "__main__":
 
 
     if exchange is None:
-        exchange = 'bitmexws_testnet'
+        exchange = 'bitmexws'
         print('setting default exchange '+exchange)
     if name is not None:
         tp.name = name
