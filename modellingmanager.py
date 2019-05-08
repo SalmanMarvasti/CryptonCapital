@@ -452,7 +452,7 @@ class modellingmanager(modelob):
 
             if abs_price_diff > 1.1 and abs_price_diff < 40:
                 if timediff<300:
-                    if netcount>50 and (bid_prob-ask_prob)>0.7:
+                    if netcount>50 and (bid_prob-ask_prob)>0.3:
                         self.reset_pred()
                     self.down_pred_count += price_diff
                     logging.info('down_count' + str(self.down_pred_count))
@@ -489,7 +489,7 @@ class modellingmanager(modelob):
             sma = max(self.markPrice, sma)
             if abs_price_diff > 1.1 and abs_price_diff < 40:
                 if  timediff< 300:
-                    if netcount<-50 and (ask_prob-bid_prob)>0.7:
+                    if netcount<-50 and (ask_prob-bid_prob)>0.3:
                         self.reset_pred()
 
                     self.up_pred_count += price_diff
@@ -815,7 +815,7 @@ class modellingmanager(modelob):
 
         if (now.minute%15==0):
             self.dic_probs[now.hour+now.minute/60]=(sell_order_per_sec,buy_order_per_sec)
-            logging.info(self.dic_probs)
+            #logging.info(self.dic_probs)
         round_min = int(now.minute / 15) * 15 + 15
         round_min = now.hour + round_min/60
 
@@ -858,30 +858,51 @@ class modellingmanager(modelob):
         qq_ask = ask_adjust + sum_asks[1] + self.orderarrival_ask + hidden_qq_ask
         prob_blo_live = (qq_bid - sell_order_per_sec) / (qq_bid)
         prob_alo_live = (qq_ask - buy_order_per_sec) / (qq_ask)
+        logging.info('signal level' + str(self.signal))
         if self.signal>=0 and abs(self.price_prediction - self.mid)>=self.last_price_error:
             print('hidden limit orders at price' + str(self.mid) )
             if self.signal==1:
                 delta_p = softmax((self.blo_probs[-1], self.alo_probs[-1] ))
                 delta_p = delta_p[0]-delta_p[1]
+                if abs(delta_p)<0.99:
+                    buy_orders = self.orders_per_sec[-1][0]
+                    qu = buy_orders / (1 - self.alo_probs[-1])
 
-                buy_orders = self.orders_per_sec[-1][0]
-                qu = buy_orders / (1 - self.alo_probs[-1])
+                    logging.info('hidden ask ' + str(qu) + ' ' + str(delta_p))
+                    h_ask, prob_new = self.find_hidden_orders(0,self.alo_probs[-1], delta_p, buy_orders, qu)
 
-                logging.info('hidden ask ' + str(qu) + ' ' + str(delta_p))
-                h_ask, prob_new = self.find_hidden_orders(h_ask,self.alo_probs[-1], delta_p, buy_orders, qu)
-
-                logging.info('adjusted hidden' + str(h_ask) +' '+ str(prob_new) + ' '+str(self.alo_probs[-1]))
-                self.hidden_ask.append(h_ask)
+                    logging.info('adjusted hidden ask' + str(h_ask) +' '+ str(prob_new) + ' '+str(self.alo_probs[-1]))
+                    self.hidden_ask.append(h_ask)
 
             elif self.signal==0:
                 delta_p = softmax((self.alo_probs[-1], self.blo_probs[-1] ))
                 delta_p = delta_p[0] - delta_p[1]
-                sell_orders = self.orders_per_sec[-1][1]
-                qu = sell_orders / (1 - self.blo_probs[-1])
-                logging.info('hidden delta_p' +' '+str(delta_p))
-                h_bid, prob_new = self.find_hidden_orders(h_bid, self.blo_probs[-1], delta_p, sell_orders, qu )
-                self.hidden_bid.append(h_bid)
-                logging.info('adjusted hidden ask'+str(h_bid))
+                if abs(delta_p)<0.99:
+                    sell_orders = self.orders_per_sec[-1][1]
+                    qu = sell_orders / (1 - self.blo_probs[-1])
+                    logging.info('hidden delta_p' +' '+str(delta_p))
+                    h_bid, prob_new = self.find_hidden_orders(0, self.blo_probs[-1], delta_p, sell_orders, qu )
+                    self.hidden_bid.append(h_bid)
+                    logging.info('adjusted hidden bid'+str(h_bid))
+        else:
+            if self.signal==-1:
+                if len(self.mid_hist) > 2:
+                    mid_diff = self.mid_hist[-1] - self.mid_hist[-2]
+                    ask_factor = 0.5
+                    bid_factor = 0.5
+                    if mid_diff>1:
+                        # price moved up, ask prob should be higher, ask survival should be lower so lower ask factor
+                        ask_factor = 0.125
+                    if mid_diff<-1:
+                        bid_factor = 0.125
+                    if abs(mid_diff)>1.2:
+                        logging.info('WARN: Price changing despite no signal. maybe adjust probs here ask bid factor: '
+                                     + str(ask_factor) + ' ' + str(bid_factor))
+                logging.info('lowering hidden bid' + str(hidden_qq_bid*bid_factor))
+                logging.info('lowering hidden ask' + str(hidden_qq_ask*ask_factor))
+                self.hidden_bid.append(hidden_qq_ask*bid_factor)
+                self.hidden_ask.append(hidden_qq_ask*ask_factor)
+
 
 
 
@@ -928,7 +949,7 @@ class modellingmanager(modelob):
                 bvwap, avwap, totala, totalb = calc_vwap(self.bids, self.asks, R, self.mid)
                 self.up_price = avwap
                 self.down_price = bvwap
-            thresh = 0.21
+            thresh = 0.19
             #self.price_prediction = self.mid
             diffg = bid_prob - ask_prob
 
@@ -1000,8 +1021,12 @@ class modellingmanager(modelob):
 
     def find_hidden_orders(self, h, prob, delta_p, market_orders , qu):
         h = delta_p * qu / (1 - delta_p - prob)
-        if h > qu:
-            h = qu
+        if abs(h) > qu:
+            factor = abs(h/qu)
+            if factor>4:
+                factor = 4
+            h = qu * np.sign(h) * factor
+
 
         # qu = market_orders/(1-prob)
         prob_new = (qu+h-market_orders)/(qu+h)
