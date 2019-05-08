@@ -239,8 +239,8 @@ class modelob:
         self.asks_hist = deque([0.99, 0.9], maxlen=15)
         self.nfs_hist = deque(maxlen=10)
         self.sma_hist = deque(maxlen=50)
-        self.hidden_ask = deque(maxlen=7)
-        self.hidden_bid = deque(maxlen=7)
+        self.hidden_ask = deque(maxlen=5)
+        self.hidden_bid = deque(maxlen=5)
         self.sma = 0
         self.mid_hist = deque([], maxlen=60)
         self.mid = 0
@@ -895,12 +895,17 @@ class modellingmanager(modelob):
                         ask_factor = 0.125
                     if mid_diff<-1:
                         bid_factor = 0.125
-                    if abs(mid_diff)>1.2:
-                        logging.info('WARN: Price changing despite no signal. maybe adjust probs here ask bid factor: '
-                                     + str(ask_factor) + ' ' + str(bid_factor))
+
                 logging.info('lowering hidden bid' + str(hidden_qq_bid*bid_factor))
                 logging.info('lowering hidden ask' + str(hidden_qq_ask*ask_factor))
-                self.hidden_bid.append(hidden_qq_ask*bid_factor)
+                if abs(hidden_qq_ask)>9000000:
+                    ask_factor=0.0625
+                if abs(hidden_qq_bid)>9000000:
+                    bid_factor = 0.0625
+                if abs(mid_diff)>1.2:
+                    logging.info('WARN: Price changing despite no signal. maybe adjust probs here ask bid factor: '
+                                 + str(ask_factor) + ' ' + str(bid_factor))
+                self.hidden_bid.append(hidden_qq_bid*bid_factor)
                 self.hidden_ask.append(hidden_qq_ask*ask_factor)
 
 
