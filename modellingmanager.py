@@ -239,8 +239,8 @@ class modelob:
         self.asks_hist = deque([0.99, 0.9], maxlen=15)
         self.nfs_hist = deque(maxlen=10)
         self.sma_hist = deque(maxlen=50)
-        self.hidden_ask = deque(maxlen=5)
-        self.hidden_bid = deque(maxlen=5)
+        self.hidden_ask = deque(maxlen=7)
+        self.hidden_bid = deque(maxlen=7)
         self.sma = 0
         self.mid_hist = deque([], maxlen=60)
         self.mid = 0
@@ -439,76 +439,85 @@ class modellingmanager(modelob):
         netcount = self.up_pred_count + self.down_pred_count
         move_amount = 0
         trend = additional_details[0]
-        if trend>1 and bid_prob>ask_prob:
-            thresh = thresh*2.2
+        mid_mark_diff = self.markPrice - self.mid
+        bthresh = thresh
+        athresh = thresh
+        if timediff>900 and abs(netcount)>80:
+            self.reset_pred()
 
-        if bid_prob > ask_prob + thresh and bid_gmean>ask_gmean:  # and (abs(diffg) > thresh*0.5 or abs(diffg)<0.05)
+        if trend>1 and bid_prob>ask_prob:
+            bthresh = thresh*2.2
+
+        if bid_prob > ask_prob + bthresh and bid_gmean>ask_gmean:  # and (abs(diffg) > thresh*0.5 or abs(diffg)<0.05)
             print('price falling')
             up = 0
             price_prediction = down_price
             price_diff = price_prediction - self.mid
             abs_price_diff = abs(price_diff)
             sma = min(self.markPrice, sma)
+            if mid_mark_diff < self.dollar_unit_cost+2:
 
-            if abs_price_diff > 1.1 and abs_price_diff < 40:
-                if timediff<300:
-                    if netcount>50 and (bid_prob-ask_prob)>0.3:
-                        self.reset_pred()
-                    self.down_pred_count += price_diff
-                    logging.info('down_count' + str(self.down_pred_count))
-                else:
-                    if netcount>0:
-                        print('reset downpredcount')
-                        self.down_pred_count = price_diff
-                        self.up_pred_count = 0
+                if abs_price_diff > 1.1 and abs_price_diff < 40:
+                    if timediff<300:
+                        if netcount>50 and (bid_prob-ask_prob)>0.3:
+                            self.reset_pred()
+                        self.down_pred_count += price_diff
+                        logging.info('down_count' + str(self.down_pred_count))
+                    else:
+                        if netcount>0:
+                            print('reset downpredcount')
+                            self.down_pred_count = price_diff
+                            self.up_pred_count = 0
 
-                if ( netcount < -4 and netcount > -30 and (sma + self.dollar_unit_cost) < self.mid ) \
-                        or \
-                        (netcount<-50 and abs(prob_diff) > 0.5 and self.mid > sma and rsi>60):  # or abs(sma-self.mid)<self.tick
-                    signal = -1
-                    move_amount = max(0.1 * abs(netcount), 1)
-                    self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-move_amount,
-                                  price_diff-move_amount, prob_diff, sma, self.mid, rsi)
-                self.last_pred_time = current_time
+                    if ( netcount < -4 and netcount > -30 and (sma + self.dollar_unit_cost) < self.mid ) \
+                            or \
+                            (netcount<-50 and abs(prob_diff) > 0.5 and self.mid > sma and rsi>60):  # or abs(sma-self.mid)<self.tick
+                        signal = -1
+                        move_amount = max(0.1 * abs(netcount), 1)
+                        self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-move_amount,
+                                      price_diff-move_amount, prob_diff, sma, self.mid, rsi)
+                    self.last_pred_time = current_time
 
-        if rsi<29 and rsi>20 and ask_prob > 0.7 and sma > self.mid and ask_gmean>bid_gmean+0.06:
+        if rsi<29 and rsi>20 and ask_prob > 0.7 and self.markPrice>self.mid and sma > self.mid and ask_gmean>bid_gmean+0.06:
             logging.info('changing thresh to 0.05')
             thresh = 0.05
-        if trend<0 and ask_prob>bid_prob:
-            thresh = thresh*2.0
+        if trend<-1 and ask_prob>bid_prob:
+           athresh = thresh*2.2
 
         if sma<self.ema:
             sma = self.ema
 
-        if ask_prob > bid_prob + thresh and ask_gmean>bid_gmean:
+        if ask_prob > bid_prob + athresh and ask_gmean>bid_gmean:
             print('price rising')
             up = 1
-            price_prediction = up_price
-            price_diff = price_prediction - self.mid
-            abs_price_diff = abs(price_diff)
-            sma = max(self.markPrice, sma)
-            if abs_price_diff > 1.1 and abs_price_diff < 40:
-                if  timediff< 300:
-                    if netcount<-50 and (ask_prob-bid_prob)>0.3:
-                        self.reset_pred()
 
-                    self.up_pred_count += price_diff
-                    logging.info('up count '+str(self.up_pred_count)+' '+str(self.up_pred_count+self.down_pred_count))
-                else:
-                    if netcount<0:
-                        self.up_pred_count = price_diff
-                        self.down_pred_count = 0
+            if mid_mark_diff>-1*self.dollar_unit_cost:
+                price_prediction = up_price
+                price_diff = price_prediction - self.mid
+                abs_price_diff = abs(price_diff)
+                sma = max(self.markPrice, sma)
+                if abs_price_diff > 1.1 and abs_price_diff < 40:
+                    if  timediff< 300:
+                        if netcount<-50 and (ask_prob-bid_prob)>0.3:
+                            self.reset_pred()
 
-                if  (netcount> 4 and netcount<30 and rsi<50) and (sma - self.dollar_unit_cost >self.mid or (netcount>50 and abs(prob_diff)> 0.5 and self.mid < sma) or
-                                                        (netcount>100 and abs(prob_diff)>0.8 and rsi <50))\
-                        :
-                # or abs(sma-self.mid)<self.tick
-                    #price_prediction = self.up_price
-                    signal = 1
-                    move_amount = max(0.1*netcount,1)
-                    self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction+move_amount,
-                                       price_diff+move_amount, prob_diff, sma, self.mid, rsi)
-                self.last_pred_time = current_time
+                        self.up_pred_count += price_diff
+                        logging.info('up count '+str(self.up_pred_count)+' '+str(self.up_pred_count+self.down_pred_count))
+                    else:
+                        if netcount<0:
+                            self.up_pred_count = price_diff
+                            self.down_pred_count = 0
+
+                    if  (netcount> 4 and netcount<30 and rsi<50) and (sma - self.dollar_unit_cost >self.mid or (netcount>50 and abs(prob_diff)> 0.5 and self.mid < sma) or
+                                                            (netcount>100 and abs(prob_diff)>0.8 and rsi <50))\
+                            :
+                    # or abs(sma-self.mid)<self.tick
+                        #price_prediction = self.up_price
+                        signal = 1
+                        move_amount = max(0.1*netcount,1)
+                        self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction+move_amount,
+                                           price_diff+move_amount, prob_diff, sma, self.mid, rsi)
+                    self.last_pred_time = current_time
         # if up==-1 and int(current_time)%prediction_checker.FIXED_OFFSET<self.tradewindow_sec:
         #     self.up_pred_count = 0
         #     self.down_pred_count = 0
@@ -691,7 +700,7 @@ class modellingmanager(modelob):
             if self.bids.shape[0]>20:
                 R = 10
             self.bids = self.bids[np.append(self.bids[0:R, 1] > 0, ~np.isnan(self.bids[R:, 1]))]
-        max_R = min(min(self.asks.shape[0], 6), self.bids.shape[0])
+        max_R = min(min(self.asks.shape[0], R), self.bids.shape[0])
         sum_range = range(0, max_R)
         sum_bids = self.bids[sum_range, :].sum(axis=0)
         sum_asks = self.asks[sum_range, :].sum(axis=0)
@@ -868,7 +877,7 @@ class modellingmanager(modelob):
                     buy_orders = self.orders_per_sec[-1][0]
                     qu = buy_orders / (1 - self.alo_probs[-1])
 
-                    logging.info('hidden ask ' + str(qu) + ' ' + str(delta_p))
+                    logging.info('qu delta_p ' + str(qu) + ' ' + str(delta_p))
                     h_ask, prob_new = self.find_hidden_orders(0,self.alo_probs[-1], delta_p, buy_orders, qu)
 
                     logging.info('adjusted hidden ask' + str(h_ask) +' '+ str(prob_new) + ' '+str(self.alo_probs[-1]))
@@ -880,7 +889,7 @@ class modellingmanager(modelob):
                 if abs(delta_p)<0.99:
                     sell_orders = self.orders_per_sec[-1][1]
                     qu = sell_orders / (1 - self.blo_probs[-1])
-                    logging.info('hidden delta_p' +' '+str(delta_p))
+                    logging.info('qu delta_p'+ str(qu)+' '+str(delta_p))
                     h_bid, prob_new = self.find_hidden_orders(0, self.blo_probs[-1], delta_p, sell_orders, qu )
                     self.hidden_bid.append(h_bid)
                     logging.info('adjusted hidden bid'+str(h_bid))
@@ -888,19 +897,19 @@ class modellingmanager(modelob):
             if self.signal==-1:
                 if len(self.mid_hist) > 2:
                     mid_diff = self.mid_hist[-1] - self.mid_hist[-2]
-                    ask_factor = 0.5
-                    bid_factor = 0.5
-                    if mid_diff>1:
+                    ask_factor = 0.25
+                    bid_factor = 0.25
+                    if mid_diff>2:
                         # price moved up, ask prob should be higher, ask survival should be lower so lower ask factor
                         ask_factor = 0.125
-                    if mid_diff<-1:
+                    if mid_diff<-2:
                         bid_factor = 0.125
 
                 logging.info('lowering hidden bid' + str(hidden_qq_bid*bid_factor))
                 logging.info('lowering hidden ask' + str(hidden_qq_ask*ask_factor))
-                if abs(hidden_qq_ask)>9000000:
+                if abs(hidden_qq_ask)>10000000:
                     ask_factor=0.0625
-                if abs(hidden_qq_bid)>9000000:
+                if abs(hidden_qq_bid)>10000000:
                     bid_factor = 0.0625
                 if abs(mid_diff)>1.2:
                     logging.info('WARN: Price changing despite no signal. maybe adjust probs here ask bid factor: '
@@ -916,6 +925,7 @@ class modellingmanager(modelob):
 
         try:
             if prob_blo_live<0 or prob_alo_live<0:
+                logging.info('negative probs'+str(prob_blo_live)+' '+str(prob_alo_live))
                 prob_blo_live = 0.99
                 prob_alo_live= 0.99
                 if len(self.orderadjustments_bid)>3:
@@ -940,6 +950,8 @@ class modellingmanager(modelob):
         timefmt = '%30.3f'
         intfmt = '%i'
         mfmt = [floatfmt, floatfmt, timefmt, timefmt]
+        self.alo_probs.append(prob_alo_live) # should be before prob calc
+        self.blo_probs.append(prob_blo_live) # should be before prob calc
         if self.SAVEDEBUG:
             np.savetxt(sfile, filtorders, fmt="%30.10f",delimiter=',')
             np.savetxt(obfile, self.bids, fmt=mfmt, delimiter=',')
@@ -954,7 +966,7 @@ class modellingmanager(modelob):
                 bvwap, avwap, totala, totalb = calc_vwap(self.bids, self.asks, R, self.mid)
                 self.up_price = avwap
                 self.down_price = bvwap
-            thresh = 0.19
+            thresh = 0.15
             #self.price_prediction = self.mid
             diffg = bid_prob - ask_prob
 
@@ -1007,8 +1019,7 @@ class modellingmanager(modelob):
 
         prob_blo_live = self.zero_one(prob_blo_live, 0.5)
         prob_alo_live = self.zero_one(prob_alo_live, 0.5)
-        self.alo_probs.append(prob_alo_live)
-        self.blo_probs.append(prob_blo_live)
+
         self.orders_per_sec.append((buy_order_per_sec,sell_order_per_sec))
 
         self.prev_current_time = current_time
@@ -1028,8 +1039,8 @@ class modellingmanager(modelob):
         h = delta_p * qu / (1 - delta_p - prob)
         if abs(h) > qu:
             factor = abs(h/qu)
-            if factor>4:
-                factor = 4
+            if factor>8:
+                factor = 8
             h = qu * np.sign(h) * factor
 
 

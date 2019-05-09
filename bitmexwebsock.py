@@ -17,7 +17,7 @@ def getBitmexWs(symb='XBTUSD'):
     # Instantiating the WS will make it connect. Be sure to add your api_key/api_secret.
 
     ws = BitMEXWebsocket(endpoint="wss://www.bitmex.com/", symbol=symb,
-                         api_key='Reipa5QHn66vmvCIS7DKbufp', api_secret='LFIIyDfyTFCne6eWEMGMRwj1iWvyF5CXFJivR7XOW7sUjWg-')
+                         api_key='swhuTZLcbJFhtLyWoS0jQY5J', api_secret='PAt4ck2OnOacrovdQM6otQNYV2fldIHPMdRuGLHdykbmUSZE')
 
     # Instantiating the WS will make it connect. Be sure to add your api_key/api_secret.
     # API URL.
