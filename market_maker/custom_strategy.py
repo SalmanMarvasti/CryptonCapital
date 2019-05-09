@@ -19,7 +19,7 @@ def prepareAndSetID(order, order2, order3=[]):
     str = base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
     order2[-1]['clOrdID'] = "mm_bitmex_" + str
     str = base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
-    if len(order3)>1:
+    if len(order3) > 1:
         order3[-2]['clOrdID'] = "mm_bitmex_" + str
     return order
 
@@ -129,19 +129,20 @@ class CustomOrderManager(OrderManager):
             if mid <= actual_mid+0.5:
                 logging.info('++++++++++going long stop:'+str(stoploss)+' target:'+str(predicted_price))
                 buy_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(mid)-1, 'orderQty': qty, 'side': "Buy"})
-                self.to_submit_sell_orders.update([(validtill_timestamp, {'execInst':'LastPrice, ParticipateDoNotInitiate','price':round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})])
-                # sell_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate, ReduceOnly','ordType':'LimitIfTouched','stopPx': round(predicted_price)-0.5, 'price': round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})
-                sell_orders.append({ 'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'StopLimit', 'stopPx':round(stoploss+10),'orderQty': qty,  'price': round(stoploss) - count,  'side': "Sell"})
+                #self.to_submit_sell_orders.update([(validtill_timestamp, {'execInst':'LastPrice, ParticipateDoNotInitiate','price':round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})])
+                sell_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate','price':round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})
+                #sell_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate, ReduceOnly','ordType':'LimitIfTouched','stopPx': round(predicted_price)-0.5, 'price': round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})
+                sell_orders.append({ 'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'StopLimit', 'stopPx':round(stoploss+10),'orderQty': qty,  'price': round(stoploss) - count+2,  'side': "Sell"})
                 prepareAndSetID(buy_orders, sell_orders)
 
         if price_diff<-2:
             if mid >= actual_mid:
                 logging.info('-------going short mid, short:'+str(mid)+' '+str(stoploss)+' target:'+str(predicted_price))
                 sell_orders.append({'execInst':'ParticipateDoNotInitiate', 'price': round(mid)+1, 'orderQty':qty, 'side': "Sell"})
-                self.to_submit_buy_orders.update([(validtill_timestamp, {'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})])
-
-                # buy_orders.append({'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'LimitIfTouched','stopPx': round(predicted_price)+1.5, 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})
-                buy_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate,ReduceOnly', 'ordType':'StopLimit', 'stopPx' : round(stoploss+10)-0.5,'orderQty': qty,  'price': round(stoploss) + count,'side': "Buy"})
+                # self.to_submit_buy_orders.update([(validtill_timestamp, {'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})])
+                buy_orders.append({'execInst':'LastPrice,ParticipateDoNotInitiate', 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})
+                #buy_orders.append({'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'LimitIfTouched','stopPx': round(predicted_price)+1.5, 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})
+                buy_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate,ReduceOnly', 'ordType':'StopLimit', 'stopPx' : round(stoploss)-0.5,'orderQty': qty,  'price': round(stoploss) + count+2,'side': "Buy"})
                 prepareAndSetID(buy_orders, sell_orders)
 
         self.last_time = time()
