@@ -18,7 +18,7 @@ def prepareAndSetID(order, order2, order3=[]):
     order[-1]['clOrdID'] = "mm_bitmex_" + str
     str = base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
     order2[-1]['clOrdID'] = "mm_bitmex_" + str
-    str = base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
+    #str = base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
     if len(order3) > 1:
         order3[-2]['clOrdID'] = "mm_bitmex_" + str
     return order
@@ -66,7 +66,11 @@ class CustomOrderManager(OrderManager):
         predicted_price = 0
         stoploss = 0
         qty = 50
-        for i in range(len(list)-1, -1, -1):
+        ll = len(list)
+        if ll>0:
+            logging.info('Trades suggested' + str(ll))
+
+        for i in range(ll-1, -1, -1):
             tmp_dict = list[i]
             count = count + 1
             if count > 3:
@@ -123,31 +127,43 @@ class CustomOrderManager(OrderManager):
             logging.info('avg mid ok setting avg mid')
             mid = avg_price/count
 
+        if abs(mid - actual_mid)>15:
+            logging.info('high difference between mid and actual'+str(actual_mid))
+        else:
+            logging.info('ok diff' +str(price_diff))
 
 
-        if price_diff>2:
-            if mid <= actual_mid+0.5:
+        if price_diff>0:
+            if abs(mid - actual_mid)<15:
                 logging.info('++++++++++going long stop:'+str(stoploss)+' target:'+str(predicted_price))
                 buy_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(mid)-1, 'orderQty': qty, 'side': "Buy"})
                 #self.to_submit_sell_orders.update([(validtill_timestamp, {'execInst':'LastPrice, ParticipateDoNotInitiate','price':round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})])
-                sell_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate','price':round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})
+                sell_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate','price':round(predicted_price) +2.5, 'orderQty': qty, 'side': "Sell"})
                 #sell_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate, ReduceOnly','ordType':'LimitIfTouched','stopPx': round(predicted_price)-0.5, 'price': round(predicted_price) +0.5, 'orderQty': qty, 'side': "Sell"})
-                sell_orders.append({ 'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'StopLimit', 'stopPx':round(stoploss+10),'orderQty': qty,  'price': round(stoploss) - count+2,  'side': "Sell"})
-                prepareAndSetID(buy_orders, sell_orders)
+                sell_orders.append({ 'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'StopLimit', 'stopPx':round(stoploss+10),'orderQty': qty,  'price': round(stoploss) - 25,  'side': "Sell"})
+                prepareAndSetID(buy_orders, sell_orders, buy_orders)
 
-        if price_diff<-2:
-            if mid >= actual_mid:
+        if price_diff<0:
+            if abs(mid - actual_mid) < 15:
                 logging.info('-------going short mid, short:'+str(mid)+' '+str(stoploss)+' target:'+str(predicted_price))
                 sell_orders.append({'execInst':'ParticipateDoNotInitiate', 'price': round(mid)+1, 'orderQty':qty, 'side': "Sell"})
                 # self.to_submit_buy_orders.update([(validtill_timestamp, {'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})])
-                buy_orders.append({'execInst':'LastPrice,ParticipateDoNotInitiate', 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})
+                buy_orders.append({'execInst':'LastPrice,ParticipateDoNotInitiate', 'price': round(predicted_price)-2, 'orderQty': qty, 'side': "Buy"})
                 #buy_orders.append({'execInst':'LastPrice,ParticipateDoNotInitiate, ReduceOnly', 'ordType':'LimitIfTouched','stopPx': round(predicted_price)+1.5, 'price': round(predicted_price), 'orderQty': qty, 'side': "Buy"})
-                buy_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate,ReduceOnly', 'ordType':'StopLimit', 'stopPx' : round(stoploss)-0.5,'orderQty': qty,  'price': round(stoploss) + count+2,'side': "Buy"})
-                prepareAndSetID(buy_orders, sell_orders)
+                buy_orders.append({'execInst':'LastPrice, ParticipateDoNotInitiate,ReduceOnly', 'ordType':'StopLimit', 'stopPx' : round(stoploss)-0.5,'orderQty': qty,  'price': round(stoploss) +25,'side': "Buy"})
+                prepareAndSetID(buy_orders, sell_orders, buy_orders)
 
         self.last_time = time()
-        self.converge_orders(buy_orders, sell_orders)
-        sleep(2)
+        while True:
+            try:
+                self.converge_orders(buy_orders, sell_orders)
+            except:
+                logging.info("HTTPError raised. Retrying in 2 seconds...")
+                sleep(2)
+                continue
+            break
+        #self.converge_orders(buy_orders, sell_orders)
+        sleep(1)
 
 
 
