@@ -442,6 +442,7 @@ class modellingmanager(modelob):
         netcount = self.up_pred_count + self.down_pred_count
         move_amount = 0
         trend = additional_details[0]
+        std_price = additional_details[2]
         mid_mark_diff = self.markPrice - self.mid
         bthresh = thresh
         athresh = thresh
@@ -476,7 +477,7 @@ class modellingmanager(modelob):
                             or \
                             (netcount<-50 and abs(prob_diff) > 0.5 and self.mid > sma and rsi>60):  # or abs(sma-self.mid)<self.tick
                         signal = -1
-                        move_amount = max(0.1 * abs(netcount), 1)
+                        move_amount = max(0.1 * abs(netcount), 0.1*std_price)
                         self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction-move_amount,
                                       price_diff-move_amount, prob_diff, sma, self.mid, rsi)
                     self.last_pred_time = current_time
@@ -517,7 +518,7 @@ class modellingmanager(modelob):
                     # or abs(sma-self.mid)<self.tick
                         #price_prediction = self.up_price
                         signal = 1
-                        move_amount = max(0.1*netcount,1)
+                        move_amount = max(0.1*netcount,0.1*std_price)
                         self.stats[x].add_pred(current_time + prediction_checker.FIXED_OFFSET, price_prediction+move_amount,
                                            price_diff+move_amount, prob_diff, sma, self.mid, rsi)
                     self.last_pred_time = current_time
@@ -998,9 +999,10 @@ class modellingmanager(modelob):
 
 
             self.last_price_error = abs(self.mid - self.price_prediction)
+            std_p = np.std(self.mid_hist)
             if len(self.sma_hist)>2:
                 trend = (sma-self.sma_hist[0])
-            up, signal1, move_amount = self.predict_and_simtrade(current_time, bid_prob, ask_prob, diffg, 0,self.up_price, self.down_price, thresh, sma, bid_gmean, ask_gmean, rsi_ind, (trend, self.ema))
+            up, signal1, move_amount = self.predict_and_simtrade(current_time, bid_prob, ask_prob, diffg, 0,self.up_price, self.down_price, thresh, sma, bid_gmean, ask_gmean, rsi_ind, (trend, self.ema, std_p))
             if up==1:
                 self.price_prediction = self.up_price + move_amount
             else:
@@ -1012,7 +1014,7 @@ class modellingmanager(modelob):
             thresh = 0.21
             up2, signal2, move_amount = self.predict_and_simtrade(current_time, bid_gmean, ask_gmean, diffg, 1,
                                                                  self.up_price, self.down_price, thresh, sma, bid_prob,
-                                                                 ask_prob, rsi_ind, (trend, self.ema))
+                                                                 ask_prob, rsi_ind, (trend, self.ema, std_p))
             if up2>up:
                 self.signal = up2
                 logging.info('signal up 2')
@@ -1029,7 +1031,7 @@ class modellingmanager(modelob):
 
 
             nn = np.array([[current_time * 1000, self.mid, self.ema, trend,
-                            bid_prob, ask_prob, bid_gmean, ask_gmean, btimetofill[0], atimetofill[0], self.price_prediction, self.up_pred_count + self.down_pred_count, sma, rsi_ind , np.std(self.mid_hist), signal2 or signal1]])
+                            bid_prob, ask_prob, bid_gmean, ask_gmean, btimetofill[0], atimetofill[0], self.price_prediction, self.up_pred_count + self.down_pred_count, sma, rsi_ind , std_p, signal2 or signal1]])
             nnfmt = self.get_fmt_list(timefmt, self.probfmt, nn.shape[1])
             np.savetxt(pfile, nn, fmt=nnfmt, delimiter=',')
             pfile.flush()
