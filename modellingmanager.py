@@ -215,7 +215,7 @@ class modelob:
             #
             self.tradewindow_sec = 25 # bitmex trade window must be lower as buyer or seller is not specified
         if self.market.lower() =='bitmexws':
-            self.tradeeurl = 'http://localhost:{port}/users'.format(port=53581)
+            self.tradeeurl = 'http://127.0.0.1:{port}/users'.format(port=53581)
             self.updateurl = "https://www.bitmex.com/api/bitcoincharts/{0}/orderBook"
             self.backup_tradeurl = "https://www.bitmex.com/api/bitcoincharts/{0}/trades"
             self.tradewindow_sec = 24  #
