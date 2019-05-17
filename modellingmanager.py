@@ -621,7 +621,7 @@ class modellingmanager(modelob):
                 # self.mid_hist.append(self.mid)
                 R = 6 # todo try 12
                 (bvwap, avwap, totala, totalb) = calc_vwap(self.bids, self.asks,R, self.mid)
-                self.vwap = (bvwap*totalb+avwap*totala)/(totala+totalb)
+                self.vwap = (bvwap*totalb+avwap*totala)/( totala+totalb)
                 self.up_price = avwap
                 self.down_price = bvwap
                 self.up_price_2 = avwap*1.001
