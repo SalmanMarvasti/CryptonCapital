@@ -167,7 +167,7 @@ class prediction_checker:
         return self.number_of_predictions
     def add_pred(self, validtill_timestamp, predicted_price, price_diff, confidence=0, sma=0, mid=0, rsi=0):
         if len(self.predlist)>0 and abs(predicted_price - self.predlist[-1][1])<(self.tick):
-            print('ignoring duplicate prediction')
+            #print('ignoring duplicate prediction')
             return
 
         if len(self.predlist)>self.max_capital_deployed:
@@ -536,7 +536,7 @@ class modellingmanager(modelob):
         try:
             with urllib.request.urlopen(self.backup_tradeurl.format(self.tradingpair)) as url:
                 latest_mo = json.loads(url.read().decode())
-                print(latest_mo)
+                #print(latest_mo)
                 # with open('marketorders.json', 'w') as outfile:
                 #     json.dump(latest_mo, outfile)
                 #if quoted['mid']>mid:
@@ -546,7 +546,7 @@ class modellingmanager(modelob):
                 filtorders = temporders[threshold]
                 self.marketorders = filtorders
                 logging.debug('no of backup market orders'+str(len(self.marketorders)))
-                print('no of backup market orders' + str(len(self.marketorders)))
+                #print('no of backup market orders' + str(len(self.marketorders)))
                 market_order_buy_sum = filtorders[(filtorders[:,-1]==0) & (filtorders[:,0]>self.bids[0, 0]), 0:2].sum(axis=0)
                 market_order_sell_sum = filtorders[filtorders[:,-1]==1 & (filtorders[:,0]<self.asks[0, 0]), 0:2].sum(axis=0)
                 return market_order_buy_sum[1], market_order_sell_sum[1], filtorders
@@ -554,7 +554,7 @@ class modellingmanager(modelob):
             logging.info(self.tradingpair + ':')
             logging.exception( str(detail))
             if detail.errno in (401,500,404):
-                print('exception http')
+                logging.error('exception http')
             return market_order_buy_sum[1], market_order_sell_sum[1]
         except ValueError as ver:
             logging.exception("ValueError"+str(ver))
@@ -593,7 +593,7 @@ class modellingmanager(modelob):
                     current_time = dt.datetime.utcnow().timestamp()
                     self.prev_current_time = current_time - 1
 
-                print(latest_ob)
+                #print(latest_ob)
                 # CONVERTS DATA TO NDARRAY AND GIVES COL NAMES
                 self.bids = convert_to_ndarray(latest_ob['bids'], current_time)
 
@@ -629,7 +629,7 @@ class modellingmanager(modelob):
 
             with urllib.request.urlopen(self.tradeeurl.format(self.tradingpair)) as url:
                 latest_mo = json.loads(url.read().decode())
-                print(latest_mo)
+                #print(latest_mo)
                 # with open('marketorders.json', 'w') as outfile:
                 #     json.dump(latest_mo, outfile)
                 if len(latest_mo) ==0:
@@ -641,7 +641,7 @@ class modellingmanager(modelob):
                 filtorders = temporders[threshold]
                 buy_sum_back = 0
                 sell_sum_back = 0
-                print('no of market orders' + str(len(filtorders)))
+                logging.debug('no of market orders' + str(len(filtorders)))
                 if not self.backtest and len(filtorders)<4:
                     buy_sum_back, sell_sum_back, filtorders = self.getmarketorders_frombackupapi(self.mid)
 
@@ -679,7 +679,7 @@ class modellingmanager(modelob):
             logging.info('HTTPERROR'+ self.tradingpair)
             logging.exception(self.tradingpair + ':' + str(detail))
             if detail.errno in (401,500,404):
-                print('exception http')
+                logging.error('exception http')
             return
         except ValueError as ver:
             logging.exception("ValueError"+str(ver))
@@ -687,7 +687,7 @@ class modellingmanager(modelob):
         except Exception as eer:
             logging.exception("unexpected Error")
             logging.warning('Error, may not recover from this')
-            print(str(eer))
+            #print(str(eer))
             return
         except:
             logging.info('very strange exception')
@@ -768,7 +768,7 @@ class modellingmanager(modelob):
         try:
             nfs_df = convert_df_bins(mdf, self.bins)
             nfs_df.index.name = 'priceindex'
-            print(nfs_df)
+            #print(nfs_df)
             R = 4
             if self.bid_gmean>0.3 or self.ask_gmean>0.3:
                 R = 6
@@ -826,7 +826,7 @@ class modellingmanager(modelob):
                 self.up_price_2 = self.mid + ask*0.50
 
         except Exception as e:
-            print('Exception NFS' + str(e))
+            logging.error('Exception NFS' + str(e))
             self.nfs_hist.clear()
         self.df = nfs_df
         sell_order_per_sec = sell_marketorder_sum/self.tradewindow_sec
@@ -847,8 +847,8 @@ class modellingmanager(modelob):
             past_order_per_sec = self.dic_probs[round_min]
             past_prob_blo_live = (sum_bids[1] - past_order_per_sec[0]) / (sum_bids[1])
             past_prob_alo_live = (sum_asks[1] - past_order_per_sec[1]) / (sum_asks[1])
-            if(past_order_per_sec[0]>0):
-                print('past order is greater than zero')
+            #if(past_order_per_sec[0]>0):
+                #print('past order is greater than zero')
         self.orderarrival_bid /= self.tradewindow_sec
         self.orderarrival_ask /= self.tradewindow_sec
         if self.adjust:
@@ -881,7 +881,7 @@ class modellingmanager(modelob):
         prob_alo_live = (qq_ask - buy_order_per_sec) / (qq_ask)
         logging.info('signal level' + str(self.signal))
         if self.signal>=0 and abs(self.price_prediction - self.mid)>=self.last_price_error:
-            print('hidden limit orders at price' + str(self.mid) )
+            #print('hidden limit orders at price' + str(self.mid) )
             if self.signal==1:
                 delta_p = softmax((self.blo_probs[-1], self.alo_probs[-1] ))
                 delta_p = delta_p[0]-delta_p[1]
