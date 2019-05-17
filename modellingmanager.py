@@ -1025,11 +1025,11 @@ class modellingmanager(modelob):
             if up2>up:
                 self.signal = up2
                 logging.info('WARNING: signal up 2'+str( self.signal))
-                # if up2 == 1:
-                #     self.price_prediction = self.up_price + move_amount
-                # else:
-                #     if up2 == 0:
-                #         self.price_prediction = self.down_price - move_amount
+                if up2 == 1:
+                    self.price_prediction = self.up_price + move_amount
+                else:
+                    if up2 == 0:
+                        self.price_prediction = self.down_price - move_amount
 
             self.confidence = abs(ask_prob - bid_prob)
             # thresh=0.21
