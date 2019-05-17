@@ -60,7 +60,7 @@ class MockServerRequestHandler(BaseHTTPRequestHandler):
 
 def get_free_port():
     s = socket.socket(socket.AF_INET, type=socket.SOCK_STREAM)
-    s.bind(('localhost', 0))
+    s.bind(('127.0.0.1', 0))
     address, port = s.getsockname()
     s.close()
     print('using port: '+str(port))
@@ -75,7 +75,7 @@ class TestMockServer(object):
     def setup_class(cls):
         # Configure mock server.
         cls.mock_server_port = 53581 #get_free_port()
-        cls.mock_server = HTTPServer(('localhost', cls.mock_server_port), MockServerRequestHandler)
+        cls.mock_server = HTTPServer(('127.0.0.1', cls.mock_server_port), MockServerRequestHandler)
 
         # Start running mock server in a separate thread.
         # Daemon threads automatically shut down when the main process exits.
@@ -84,7 +84,7 @@ class TestMockServer(object):
         cls.mock_server_thread.start()
 
     def test_request_response(self):
-        url = 'http://localhost:{port}/users'.format(port=self.mock_server_port)
+        url = 'http://127.0.0.1:{port}/users'.format(port=self.mock_server_port)
 
         # Send a request to the mock API server and store the response.
         response = requests.get(url)
