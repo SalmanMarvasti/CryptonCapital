@@ -160,7 +160,7 @@ class prediction_checker:
                 self.expiredlist.append((a, change_amount))
                 self.cost +=self.percent_cost*price
         self.predlist = newlist
-        if self.id == 0:
+        if self.id == 1:
             with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
                               overwrite=True) as output:
                 output.write(pickle.dumps(self.predlist))
@@ -181,7 +181,7 @@ class prediction_checker:
             stoploss = entry_price -  abs(price_diff) - self.tick
 
         self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi))
-        if self.id==0:
+        if self.id == 1:
             with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
                               overwrite=True) as output:
                 output.write(pickle.dumps(self.predlist))
@@ -888,6 +888,7 @@ class modellingmanager(modelob):
                 delta_p = softmax((self.blo_probs[-1], self.alo_probs[-1] ))
                 delta_p = delta_p[0]-delta_p[1]
                 if abs(delta_p)<0.99:
+                    bid_factor  = 0.625
                     buy_orders = self.orders_per_sec[-1][0]
                     qu = buy_orders / (1 - self.alo_probs[-1])
 
@@ -896,16 +897,20 @@ class modellingmanager(modelob):
 
                     logging.info('adjusted hidden ask' + str(h_ask) +' '+ str(prob_new) + ' '+str(self.alo_probs[-1]))
                     self.hidden_ask.append(h_ask)
+                    self.hidden_bid.append(hidden_qq_bid * bid_factor)
+
 
             elif self.signal==0:
                 delta_p = softmax((self.alo_probs[-1], self.blo_probs[-1] ))
                 delta_p = delta_p[0] - delta_p[1]
                 if abs(delta_p)<0.99:
+                    ask_factor = 0.625
                     sell_orders = self.orders_per_sec[-1][1]
                     qu = sell_orders / (1 - self.blo_probs[-1])
                     logging.info('qu delta_p'+ str(qu)+' '+str(delta_p))
                     h_bid, prob_new = self.find_hidden_orders(0, self.blo_probs[-1], delta_p, sell_orders, qu )
                     self.hidden_bid.append(h_bid)
+                    self.hidden_ask.append(hidden_qq_ask * ask_factor)
                     logging.info('adjusted hidden bid'+str(h_bid))
         else:
             if self.signal==-1:
@@ -1019,7 +1024,12 @@ class modellingmanager(modelob):
                                                                  ask_prob, rsi_ind, (trend, self.ema, std_p))
             if up2>up:
                 self.signal = up2
-                logging.info('signal up 2')
+                logging.info('WARNING: signal up 2'+str( self.signal))
+                # if up2 == 1:
+                #     self.price_prediction = self.up_price + move_amount
+                # else:
+                #     if up2 == 0:
+                #         self.price_prediction = self.down_price - move_amount
 
             self.confidence = abs(ask_prob - bid_prob)
             # thresh=0.21
