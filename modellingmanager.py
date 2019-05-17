@@ -43,6 +43,8 @@ def calc_vwap(bids, asks, Rbins=8, mid=0):
     Rbins = min(asks.shape[0], min(bids.shape[0], Rbins))
     totalb = np.sum(bids[0:Rbins,1])
     totala = np.sum(asks[0:Rbins,1])
+    totala = max(totala, 1)
+    totalb = max(totalb, 1)
     bid_vwap=0
     ask_vwap=0
     for r in range(0, Rbins):
