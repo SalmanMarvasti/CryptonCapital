@@ -2,20 +2,23 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import socket
 from threading import Thread
-import io
+# import io
 import json
+import time
 # Third-party imports...
 # from nose.tools import assert_true
 import requests
 #import numpy as np
 from bitmexwebsock import getBitmexWs
-import ciso8601
+import iso8601
+# import pytz
 def convert_utc_to_epoch_trades(timestamp_string):
     '''Use this function to convert utc to epoch'''
     #temp = timestamp_string.split('.')
     #con = temp[0]
     #timestamp = datetime.strptime(con, '%Y-%m-%dT%H:%M:%S')
-    timestamp = ciso8601.parse_datetime(timestamp_string)
+    timestamp = iso8601.parse_date(timestamp_string)
+    timestamp = timestamp.replace(tzinfo=None)
     epoch = timestamp.timestamp()
     return epoch*1000
 
@@ -94,7 +97,7 @@ class TestMockServer(object):
 
 
 
-import time
+
 import sys
 if __name__ == "__main__":
     global pair
