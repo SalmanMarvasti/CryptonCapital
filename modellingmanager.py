@@ -885,8 +885,8 @@ class modellingmanager(modelob):
         if self.signal>=0 and abs(self.price_prediction - self.mid)>=self.last_price_error:
             #print('hidden limit orders at price' + str(self.mid) )
             if self.signal==1:
-                bprob_surv = np.mean(list(self.blo_probs)[-4:-1])
-                aprob_surv = np.mean(list(self.alo_probs)[-4:-1])
+                bprob_surv = np.mean(list(self.blo_probs)[-2:])
+                aprob_surv = np.mean(list(self.alo_probs)[-2:])
                 delta_p = softmax((bprob_surv, aprob_surv ))
                 delta_p = delta_p[0]-delta_p[1]
                 if abs(delta_p)<0.99:
@@ -903,8 +903,8 @@ class modellingmanager(modelob):
 
 
             elif self.signal==0:
-                bprob_surv = np.mean(list(self.blo_probs)[-4:-1])
-                aprob_surv = np.mean(list(self.alo_probs)[-4:-1])
+                bprob_surv = np.mean(list(self.blo_probs)[-2:])
+                aprob_surv = np.mean(list(self.alo_probs)[-2:])
                 delta_p = softmax((aprob_surv, bprob_surv ))
                 delta_p = delta_p[0] - delta_p[1]
                 if abs(delta_p)<0.99:
