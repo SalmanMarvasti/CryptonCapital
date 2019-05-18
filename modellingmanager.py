@@ -135,7 +135,7 @@ class prediction_checker:
                     else: # gone long
                         price_loss = price - entry_price
                     if ((price_loss)<-0.50 and abs(price_loss) > abs(price-a[4])) or (timepassed > 300 and (price_loss)<0 and abs(price_loss) > (0.25*abs(a[2])) ): # was 5 in last real time test
-                        logging.info('order stopped')
+                        logging.info('order stopped'+str(self.id))
                         loss_amount = abs(price_loss)
                         self.dollar_gain -= loss_amount
                         self.number_stopped += 1
@@ -148,7 +148,7 @@ class prediction_checker:
 
                         newlist.append(a)
             else:
-                print('order expired')
+                #print('order expired')
                 entry_price = a[1] - a[2]
                 diff = a[2]
                 if diff>0:
@@ -171,6 +171,7 @@ class prediction_checker:
         if len(self.predlist)>0 and abs(predicted_price - self.predlist[-1][1])<(self.tick):
             #print('ignoring duplicate prediction')
             return
+        logging.info('New prediction:'+str(self.id))
 
         if len(self.predlist)>self.max_capital_deployed:
             self.max_capital_deployed = len(self.predlist)
@@ -882,15 +883,15 @@ class modellingmanager(modelob):
         prob_blo_live = (qq_bid - sell_order_per_sec) / (qq_bid)
         prob_alo_live = (qq_ask - buy_order_per_sec) / (qq_ask)
         logging.info('signal level' + str(self.signal))
-        if self.signal>=0 and abs(self.price_prediction - self.mid)>=self.last_price_error:
+        if self.signal >= 0 and abs(self.price_prediction - self.mid)>=self.last_price_error:
             #print('hidden limit orders at price' + str(self.mid) )
-            if self.signal==1:
+            if self.signal == 1:
                 bprob_surv = np.mean(list(self.blo_probs)[-2:])
                 aprob_surv = np.mean(list(self.alo_probs)[-2:])
                 delta_p = softmax((bprob_surv, aprob_surv ))
                 delta_p = delta_p[0]-delta_p[1]
                 if abs(delta_p)<0.99:
-                    bid_factor  = 0.625
+                    bid_factor  = 0.5
                     buy_orders = self.orders_per_sec[-1][0]
                     qu = buy_orders / (1 - self.alo_probs[-1])
 
@@ -899,29 +900,35 @@ class modellingmanager(modelob):
 
                     logging.info('adjusted hidden ask' + str(h_ask) +' '+ str(prob_new) + ' '+str(self.alo_probs[-1]))
                     self.hidden_ask.append(h_ask)
+                    if hidden_qq_bid<0:
+                        hidden_qq_bid = 0
                     self.hidden_bid.append(hidden_qq_bid * bid_factor)
 
 
-            elif self.signal==0:
+            elif self.signal == 0:
                 bprob_surv = np.mean(list(self.blo_probs)[-2:])
                 aprob_surv = np.mean(list(self.alo_probs)[-2:])
                 delta_p = softmax((aprob_surv, bprob_surv ))
                 delta_p = delta_p[0] - delta_p[1]
                 if abs(delta_p)<0.99:
-                    ask_factor = 0.625
+                    ask_factor = 0.5
                     sell_orders = self.orders_per_sec[-1][1]
                     qu = sell_orders / (1 - self.blo_probs[-1])
                     logging.info('qu delta_p'+ str(qu)+' '+str(delta_p))
                     h_bid, prob_new = self.calc_hidden_orders(0, bprob_surv, delta_p, sell_orders, qu)
                     self.hidden_bid.append(h_bid)
+                    if hidden_qq_ask < 0:
+                        hidden_qq_ask = 0
+
                     self.hidden_ask.append(hidden_qq_ask * ask_factor)
+
                     logging.info('adjusted hidden bid'+str(h_bid))
         else:
             if self.signal==-1:
                 if len(self.mid_hist) > 2:
                     mid_diff = self.mid_hist[-1] - self.mid_hist[-2]
-                    ask_factor = 0.375
-                    bid_factor = 0.375
+                    ask_factor = 0.25
+                    bid_factor = 0.25
                     if mid_diff>2:
                         # price moved up, ask prob should be higher, ask survival should be lower so lower ask factor
                         ask_factor = 0.125
