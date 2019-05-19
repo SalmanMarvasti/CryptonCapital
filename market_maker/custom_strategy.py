@@ -98,7 +98,7 @@ class CustomOrderManager(OrderManager):
                     else:
                         buy_orders.append({'price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
                 if price_diff>1:
-                    predicted_price = aprice+15  # test code
+                    # predicted_price = aprice+15  # test code
                     # mid = actual_mid
                     # open_qty = 10
 
