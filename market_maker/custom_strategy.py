@@ -84,16 +84,17 @@ class CustomOrderManager(OrderManager):
             if validtill_timestamp in self.d.keys():
                 if time()-self.last_time>90:
                     continue
-                if validtill_timestamp not in self.to_submit_sell_orders.keys():
-                    if validtill_timestamp not in self.to_submit_buy_orders.keys():
-                        continue
-                    else:
-                        buy_orders.append( self.to_submit_buy_orders[validtill_timestamp])
-                else:
-                    sell_orders.append( self.to_submit_sell_orders[validtill_timestamp])
+                logging.info('retrying order')
+                # if validtill_timestamp not in self.to_submit_sell_orders.keys():
+                #     if validtill_timestamp not in self.to_submit_buy_orders.keys():
+                #         continue
+                #     else:
+                #         buy_orders.append( self.to_submit_buy_orders[validtill_timestamp])
+                # else:
+                #     sell_orders.append( self.to_submit_sell_orders[validtill_timestamp])
             if(price_diff<0):
                 if predicted_price>bprice: # if ticker lower cancel
-                    print('cancelling simulated stop')
+                    logging.info('cancelling simulated stop')
                     continue
                 else:
                     buy_orders.append({'price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
@@ -118,6 +119,9 @@ class CustomOrderManager(OrderManager):
             self.converge_orders(buy_orders, sell_orders)
             sleep(2)
             return
+        else:
+            sell_orders.clear()
+            buy_orders.clear()
 
         if count == 0:
             count = 1
