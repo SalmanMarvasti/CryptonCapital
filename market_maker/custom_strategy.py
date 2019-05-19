@@ -65,7 +65,7 @@ class CustomOrderManager(OrderManager):
         mid = 0
         predicted_price = 0
         stoploss = 0
-        qty = 50
+        qty = 30
         ll = len(dflist)
         if ll>0:
             logging.info('Trades suggested' + str(ll))
