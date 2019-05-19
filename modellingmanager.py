@@ -83,7 +83,7 @@ FIXTIC = 0.015625
 class prediction_checker:
     FIXED_OFFSET = 1000
     def __init__(self, thresh=0.2, percent_cost = 0.0008, tradepair='XBTUSD', id=5):
-        self.id = id
+        self.num_id = id
         self.predlist = []
         self.number_of_predictions = 1 # prevent divide by zero erros
         self.number_correct = 0
@@ -116,7 +116,7 @@ class prediction_checker:
 
     def update(self, price, timestamp, tick):
         newlist = []
-        if price>10000:
+        if price>100000:
             raise Exception('invalid price')
         self.tick=tick
         for a in self.predlist:
@@ -135,7 +135,7 @@ class prediction_checker:
                     else: # gone long
                         price_loss = price - entry_price
                     if ((price_loss)<-0.50 and abs(price_loss) > abs(price-a[4])) or (timepassed > 300 and (price_loss)<0 and abs(price_loss) > (0.25*abs(a[2])) ): # was 5 in last real time test
-                        logging.info('order stopped'+str(self.id))
+                        logging.info('order stopped' + str(self.num_id))
                         loss_amount = abs(price_loss)
                         self.dollar_gain -= loss_amount
                         self.number_stopped += 1
@@ -160,7 +160,8 @@ class prediction_checker:
                 self.expiredlist.append((a, change_amount))
                 self.cost +=self.percent_cost*price
         self.predlist = newlist
-        if self.id == 1:
+        if self.num_id == 1:
+            logging.info('Update: writing pkl file'+str(len(self.predlist)))
             with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
                               overwrite=True) as output:
                 output.write(pickle.dumps(self.predlist))
@@ -171,7 +172,7 @@ class prediction_checker:
         if len(self.predlist)>0 and abs(predicted_price - self.predlist[-1][1])<(self.tick):
             #print('ignoring duplicate prediction')
             return
-        logging.info('New prediction:'+str(self.id))
+        logging.info('New prediction:' + str(self.num_id))
 
         if len(self.predlist)>self.max_capital_deployed:
             self.max_capital_deployed = len(self.predlist)
@@ -182,7 +183,8 @@ class prediction_checker:
             stoploss = entry_price -  abs(price_diff) - self.tick
 
         self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi))
-        if self.id == 1:
+        if self.num_id == 1:
+            logging.info('ADD:writing pkl file' + str(len(self.predlist)))
             with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
                               overwrite=True) as output:
                 output.write(pickle.dumps(self.predlist))
@@ -203,7 +205,7 @@ class modelob:
         self.latestob = {}
         self.tradewindow_sec = 29
         self.epsi=0.00000000001
-        self.stats = [prediction_checker(thresh=0.2, tradepair=self.tradingpair, id=0), prediction_checker(0.3), prediction_checker(0.4), prediction_checker(thresh=0.2, tradepair=self.tradingpair)]
+        self.stats = [prediction_checker(thresh=0.2, tradepair=self.tradingpair, id=0), prediction_checker(thresh=0.3, id=1), prediction_checker(0.4), prediction_checker(thresh=0.2, tradepair=self.tradingpair)]
         self.markPrice = 0
 
         if self.market =='Binance':
@@ -1004,7 +1006,7 @@ class modellingmanager(modelob):
                 self.up_price = avwap
                 self.down_price = bvwap
 
-            thresh = 0.15
+            thresh = 0.22
             #self.price_prediction = self.mid
             diffg = bid_prob - ask_prob
 

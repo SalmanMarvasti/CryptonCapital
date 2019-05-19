@@ -40,9 +40,9 @@ class CustomOrderManager(OrderManager):
 
 
         # populate buy and sell orders, e.g.
-        print("placing new ")
+
         file = open(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', 'rb')
-        list = pickle.load(file)
+        dflist = pickle.load(file)
         file.close()
         ticker = self.exchange.get_ticker()
         mypos = self.exchange.get_position()
@@ -56,7 +56,7 @@ class CustomOrderManager(OrderManager):
         actual_mid = (bprice+aprice) / 2
 
         # tmp_dict = (111, 5310.963348252087, -2.286651747913311, 0.6608195356969412, 5335.036651747913, 5292.875, 5330.25, 58.89052108574486)
-        # list.append(tmp_dict)
+        # dflist.append(tmp_dict)
         count = 0
 
         avg_price = 0
@@ -66,15 +66,13 @@ class CustomOrderManager(OrderManager):
         predicted_price = 0
         stoploss = 0
         qty = 50
-        ll = len(list)
+        ll = len(dflist)
         if ll>0:
             logging.info('Trades suggested' + str(ll))
 
         for i in range(ll-1, -1, -1):
-            tmp_dict = list[i]
+            tmp_dict = dflist[i]
             count = count + 1
-            if count > 3:
-                continue
 
             (validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi) = (tmp_dict[0], tmp_dict[1], tmp_dict[2], tmp_dict[3], tmp_dict[4], tmp_dict[5], tmp_dict[6], tmp_dict[7])
             print(validtill_timestamp)
@@ -93,18 +91,20 @@ class CustomOrderManager(OrderManager):
                         buy_orders.append( self.to_submit_buy_orders[validtill_timestamp])
                 else:
                     sell_orders.append( self.to_submit_sell_orders[validtill_timestamp])
-            #     if(price_diff<0):
-            #         if predicted_price>bprice: # if ticker lower cancel
-            #             print('cancelling simulated stop')
-            #             continue
-            #         else:
-            #             buy_orders.append({'price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
-            #     if price_diff>1:
-            #         if predicted_price<aprice:
-            #             continue
-            #         else:
-            #             sell_orders.append({'price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
-            #
+            if(price_diff<0):
+                if predicted_price>bprice: # if ticker lower cancel
+                    print('cancelling simulated stop')
+                    continue
+                else:
+                    buy_orders.append({'price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
+            if price_diff>1:
+                #predicted_price = aprice+15
+                if predicted_price<aprice:
+                    continue
+                else:
+                    sell_orders.append({'price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
+
+
             #     print('ignoring duplicate')
             #     continue
             self.d.update([(validtill_timestamp, price_diff)])
@@ -113,7 +113,7 @@ class CustomOrderManager(OrderManager):
             avg_price+=mid
             avg_stop += stoploss
 
-        if (len(sell_orders)>0 or len(buy_orders)>0) and open_qty>0:
+        if (len(sell_orders)>0 and open_qty>0) or (len(buy_orders)>0 and open_qty<0):
             logging.info('Take profit limit orders only no new orders')
             self.converge_orders(buy_orders, sell_orders)
             sleep(2)
@@ -123,17 +123,18 @@ class CustomOrderManager(OrderManager):
             count = 1
         price_diff = avg_diff/count
         stoploss = avg_stop/count
-        if abs(mid - avg_price/count)<5:
+        if avg_price!=0 and abs(mid - avg_price/count)<5:
             logging.info('avg mid ok setting avg mid')
             mid = avg_price/count
 
-        if abs(mid - actual_mid)>15:
-            logging.info('high difference between mid and actual'+str(actual_mid))
+        if mid!=0 and abs(mid - actual_mid)>15:
+            logging.info('high difference between mid and actual'+str(actual_mid)+str(mid))
         else:
             logging.info('ok diff' +str(price_diff))
 
 
         if price_diff>0:
+            print("placing new ")
             if abs(mid - actual_mid)<15:
                 logging.info('++++++++++going long stop:'+str(stoploss)+' target:'+str(predicted_price))
                 buy_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(mid)-1, 'orderQty': qty, 'side': "Buy"})
@@ -144,6 +145,7 @@ class CustomOrderManager(OrderManager):
                 prepareAndSetID(buy_orders, sell_orders, buy_orders)
 
         if price_diff<0:
+            print("placing new ")
             if abs(mid - actual_mid) < 15:
                 logging.info('-------going short mid, short:'+str(mid)+' '+str(stoploss)+' target:'+str(predicted_price))
                 sell_orders.append({'execInst':'ParticipateDoNotInitiate', 'price': round(mid)+1, 'orderQty':qty, 'side': "Sell"})
