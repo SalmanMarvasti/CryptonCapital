@@ -96,7 +96,7 @@ class CustomOrderManager(OrderManager):
                         logging.info('cancelling repeat short')
                         continue
                     else:
-                        buy_orders.append({'price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
+                        buy_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
                 if price_diff>1:
                     # predicted_price = aprice+15  # test code
                     # mid = actual_mid
@@ -106,7 +106,7 @@ class CustomOrderManager(OrderManager):
                         logging.info('cancelling repeat long')
                         continue
                     else:
-                        sell_orders.append({'price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
+                        sell_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
 
 
             #     print('ignoring duplicate')
