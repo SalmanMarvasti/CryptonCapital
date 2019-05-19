@@ -13,8 +13,8 @@ BASE_URL = "https://www.bitmex.com/api/v1/" # Once you're ready, uncomment this.
 #BASE_URL = "https://testnet.bitmex.com/api/v1/"
 #API_KEY = "LvFUQxoAisotHBG9_TJP7Vnt"
 #API_SECRET = "nbt2JwSNAnielJCq4x2FJC3dTNLxCTZtHeGCeYoro2lWbjak"
-API_SECRET = "rPCmXshVDIpYDcTP0DIWoRLEkAiNZ2UftatsOUlzfA_EiNcE"
-API_KEY = "_8goaUk9cIvjkxC4bv5qOhjT"
+API_SECRET = "8dGXDXFKOQf7mrbShJvkFcdGWZgv1GFKYF13W47dyMaJREBA"
+API_KEY = "tf4LyDdUIaqAnOVoKaNii-bs"
 
 ########################################################################################################################
 # Target

@@ -77,8 +77,7 @@ class CustomOrderManager(OrderManager):
             (validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi) = (tmp_dict[0], tmp_dict[1], tmp_dict[2], tmp_dict[3], tmp_dict[4], tmp_dict[5], tmp_dict[6], tmp_dict[7])
             print(validtill_timestamp)
 
-
-
+            #mid = actual_mid
 
 
             if validtill_timestamp in self.d.keys():
@@ -92,18 +91,22 @@ class CustomOrderManager(OrderManager):
                 #         buy_orders.append( self.to_submit_buy_orders[validtill_timestamp])
                 # else:
                 #     sell_orders.append( self.to_submit_sell_orders[validtill_timestamp])
-            if(price_diff<0):
-                if predicted_price>bprice: # if ticker lower cancel
-                    logging.info('cancelling simulated stop')
-                    continue
-                else:
-                    buy_orders.append({'price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
-            if price_diff>1:
-                #predicted_price = aprice+15
-                if predicted_price<aprice:
-                    continue
-                else:
-                    sell_orders.append({'price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
+                if(price_diff<0):
+                    if predicted_price>bprice: # if ticker lower cancel
+                        logging.info('cancelling repeat short')
+                        continue
+                    else:
+                        buy_orders.append({'price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
+                if price_diff>1:
+                    predicted_price = aprice+15  # test code
+                    # mid = actual_mid
+                    # open_qty = 10
+
+                    if predicted_price<aprice:
+                        logging.info('cancelling repeat long')
+                        continue
+                    else:
+                        sell_orders.append({'price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
 
 
             #     print('ignoring duplicate')

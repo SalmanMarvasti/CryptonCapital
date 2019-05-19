@@ -417,7 +417,7 @@ class OrderManager:
             for order in reversed(to_cancel):
                 logger.info("%4s %d @ %.*f" % (order['side'], order['leavesQty'], tickLog, order['price']))
             print('dry run to cancel'+str(to_cancel))
-            #self.exchange.cancel_bulk_orders(to_cancel)
+            self.exchange.cancel_bulk_orders(to_cancel)
 
     ###
     # Position Limits
