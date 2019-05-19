@@ -393,14 +393,14 @@ class OrderManager:
             # made it not amendable.
             # If that happens, we need to catch it and re-tick.
             try:
-                #self.exchange.amend_bulk_orders(to_amend)
+                self.exchange.amend_bulk_orders(to_amend)
                 print('dry run amend'+str(to_amend))
             except requests.exceptions.HTTPError as e:
                 errorObj = e.response.json()
                 if errorObj['error']['message'] == 'Invalid ordStatus':
                     logger.warn("Amending failed. Waiting for order data to converge and retrying.")
                     sleep(0.5)
-                    return self.place_orders()
+                    #return self.place_orders()
                 else:
                     logger.error("Unknown error on amend: %s. Exiting" % errorObj)
                     #sys.exit(1)
@@ -417,7 +417,7 @@ class OrderManager:
             for order in reversed(to_cancel):
                 logger.info("%4s %d @ %.*f" % (order['side'], order['leavesQty'], tickLog, order['price']))
             print('dry run to cancel'+str(to_cancel))
-            self.exchange.cancel_bulk_orders(to_cancel)
+            # self.exchange.cancel_bulk_orders(to_cancel)
 
     ###
     # Position Limits
