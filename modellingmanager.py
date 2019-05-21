@@ -160,7 +160,7 @@ class prediction_checker:
                 self.expiredlist.append((a, change_amount))
                 self.cost +=self.percent_cost*price
         self.predlist = newlist
-        if self.num_id == 1:
+        if self.num_id == 0:
             logging.info('Update: writing pkl file'+str(len(self.predlist)))
             with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
                               overwrite=True) as output:
@@ -183,7 +183,7 @@ class prediction_checker:
             stoploss = entry_price -  abs(price_diff) - self.tick
 
         self.predlist.append((validtill_timestamp, predicted_price, price_diff, confidence, stoploss, sma, mid, rsi))
-        if self.num_id == 1:
+        if self.num_id == 0:
             logging.info('ADD:writing pkl file' + str(len(self.predlist)))
             with atomic_write(self.filepath + 'df/' + self.tradingpair + 'trades.pkl', mode='wb',
                               overwrite=True) as output:
@@ -1031,7 +1031,7 @@ class modellingmanager(modelob):
 
 
             self.signal = up
-            thresh = 0.21
+            thresh = 0.22
             up2, signal2, move_amount = self.predict_and_simtrade(current_time, bid_gmean, ask_gmean, diffg, 1,
                                                                  self.up_price, self.down_price, thresh, sma, bid_prob,
                                                                  ask_prob, rsi_ind, (trend, self.ema, std_p))

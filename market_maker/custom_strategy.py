@@ -7,12 +7,37 @@ import pickle
 import uuid
 import base64
 import logging
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-                    datefmt='%m-%d %H:%M',
-                    filename='./custom_strategy.log',
-                    filemode='w')
+from logging import Formatter
+from logging.handlers import TimedRotatingFileHandler
 
+
+def init_logging():
+    # if not os.path.exists(log_path):
+    #     try:
+    #         os.makedirs(log_path)
+    #     except Exception:
+    #         exc_type, exc_value, exc_traceback = sys.exc_info()
+    #         print(exc_type, exc_value, exc_traceback)
+
+    format = '%(asctime)s - %(levelname)s - %(message)s'
+    formatter = Formatter(format)
+    l_level = logging.DEBUG
+    l_datefmt = '%m-%d %H:%M'
+    l_filename = './custom_strategy.log'
+    #l_filemode = 'w'
+
+    fileHandler = TimedRotatingFileHandler(filename=l_filename, when='d')
+    fileHandler.setFormatter(formatter)
+    logging.basicConfig(level=l_level,
+                        format=format,
+                        datefmt=l_datefmt,
+                        handlers=[fileHandler])
+
+    # logging.getLogger('') ????root????????????????
+    #log = logging.getLogger('')
+    #log.addHandler(fileHandler)
+    #return log
+init_logging()
 def prepareAndSetID(order, order2, order3=[]):
     str = base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
     order[-1]['clOrdID'] = "mm_bitmex_" + str
