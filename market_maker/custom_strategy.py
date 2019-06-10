@@ -48,6 +48,8 @@ def prepareAndSetID(order, order2, order3=[]):
         order3[-2]['clOrdID'] = "mm_bitmex_" + str
     return order
 
+
+
 class CustomOrderManager(OrderManager):
     """A sample order manager for implementing your own custom strategy"""
     tradingpair = 'XBTUSD'
@@ -57,6 +59,17 @@ class CustomOrderManager(OrderManager):
     to_submit_buy_orders = {}
     last_time = time()
 
+    def try_conv_orders(self, buy_orders, sell_orders):
+        c = 0
+        while c<100:
+            try:
+                self.converge_orders(buy_orders, sell_orders)
+            except:
+                logging.info("HTTPError raised. Retrying in 2 seconds...")
+                sleep(2)
+                continue
+            break
+            c = c+1
     def place_orders(self) -> None:
         # implement your custom strategy here
 
@@ -121,6 +134,10 @@ class CustomOrderManager(OrderManager):
                         logging.info('cancelling repeat short')
                         continue
                     else:
+                        if mid+1>=aprice:
+                            sell_orders.append(
+                                {'execInst': 'ParticipateDoNotInitiate', 'price': round(mid) + 1, 'orderQty': qty,
+                                 'side': "Sell"})
                         buy_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
                 if price_diff>1:
                     # predicted_price = aprice+15  # test code
@@ -131,6 +148,10 @@ class CustomOrderManager(OrderManager):
                         logging.info('cancelling repeat long')
                         continue
                     else:
+                        if mid-1<=bprice:
+                            buy_orders.append(
+                                {'execInst': 'ParticipateDoNotInitiate', 'price': round(mid) - 1, 'orderQty': qty,
+                                 'side': "Buy"})
                         sell_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
 
 
@@ -144,7 +165,7 @@ class CustomOrderManager(OrderManager):
 
         if (len(sell_orders)>0 and open_qty>0) or (len(buy_orders)>0 and open_qty<0):
             logging.info('Take profit limit orders only no new orders')
-            self.converge_orders(buy_orders, sell_orders)
+            self.try_conv_orders(buy_orders, sell_orders)
             sleep(2)
             return
         else:
