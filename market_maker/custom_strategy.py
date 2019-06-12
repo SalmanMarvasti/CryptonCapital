@@ -76,6 +76,8 @@ class CustomOrderManager(OrderManager):
         buy_orders = []
         sell_orders = []
 
+        retry_buy_orders = []
+        retry_sell_orders = []
 
         # populate buy and sell orders, e.g.
 
@@ -135,7 +137,7 @@ class CustomOrderManager(OrderManager):
                         continue
                     else:
                         if mid+1>=aprice:
-                            sell_orders.append(
+                            retry_sell_orders.append(
                                 {'execInst': 'ParticipateDoNotInitiate', 'price': round(mid) + 1, 'orderQty': qty,
                                  'side': "Sell"})
                         buy_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(predicted_price) - 0.5, 'orderQty': qty, 'side': "Buy"})
@@ -149,7 +151,7 @@ class CustomOrderManager(OrderManager):
                         continue
                     else:
                         if mid-1<=bprice:
-                            buy_orders.append(
+                            retry_buy_orders.append(
                                 {'execInst': 'ParticipateDoNotInitiate', 'price': round(mid) - 1, 'orderQty': qty,
                                  'side': "Buy"})
                         sell_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
@@ -162,6 +164,9 @@ class CustomOrderManager(OrderManager):
             avg_diff+=price_diff
             avg_price+=mid
             avg_stop += stoploss
+
+        if len(retry_sell_orders) > 0 or len(retry_buy_orders)>0:
+            self.try_conv_orders(retry_buy_orders, retry_sell_orders)
 
         if (len(sell_orders)>0 and open_qty>0) or (len(buy_orders)>0 and open_qty<0):
             logging.info('Take profit limit orders only no new orders')
