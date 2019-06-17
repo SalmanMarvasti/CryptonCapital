@@ -121,7 +121,8 @@ class CustomOrderManager(OrderManager):
 
 
             if validtill_timestamp in self.d.keys():
-                if time()-self.last_time>90:
+                c_time = self.d[validtill_timestamp]
+                if c_time-self.last_time>60:
                     continue
                 logging.info('retrying order')
                 # if validtill_timestamp not in self.to_submit_sell_orders.keys():
@@ -159,7 +160,7 @@ class CustomOrderManager(OrderManager):
 
             #     print('ignoring duplicate')
             #     continue
-            self.d.update([(validtill_timestamp, price_diff)])
+            self.d.update([(validtill_timestamp, time())])
 
             avg_diff+=price_diff
             avg_price+=mid
