@@ -160,7 +160,7 @@ class CustomOrderManager(OrderManager):
 
             #     print('ignoring duplicate')
             #     continue
-            self.d.update([(validtill_timestamp, time())])
+
 
             avg_diff+=price_diff
             avg_price+=mid
@@ -177,7 +177,8 @@ class CustomOrderManager(OrderManager):
         else:
             sell_orders.clear()
             buy_orders.clear()
-
+        print('updating timestamp')
+        self.d.update([(validtill_timestamp, time())])
         if count == 0:
             count = 1
         price_diff = avg_diff/count
