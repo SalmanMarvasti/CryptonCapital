@@ -156,7 +156,8 @@ class CustomOrderManager(OrderManager):
                                 {'execInst': 'ParticipateDoNotInitiate', 'price': round(mid) - 1, 'orderQty': qty,
                                  'side': "Buy"})
                         sell_orders.append({'execInst':'ParticipateDoNotInitiate','price': round(predicted_price) + 0.5, 'orderQty': qty, 'side': "Sell"})
-
+            else:
+                self.d.update([(validtill_timestamp, time())])
 
             #     print('ignoring duplicate')
             #     continue
@@ -178,7 +179,7 @@ class CustomOrderManager(OrderManager):
             sell_orders.clear()
             buy_orders.clear()
         print('updating timestamp')
-        self.d.update([(validtill_timestamp, time())])
+
         if count == 0:
             count = 1
         price_diff = avg_diff/count
