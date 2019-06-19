@@ -166,7 +166,7 @@ class CustomOrderManager(OrderManager):
             avg_price+=mid
             avg_stop += stoploss
 
-        if len(retry_sell_orders) > 0 or len(retry_buy_orders)>0:
+        if (len(retry_sell_orders) > 0 and open_qty==0) or (len(retry_buy_orders)>0 and open_qty==0):
             self.try_conv_orders(retry_buy_orders, retry_sell_orders)
 
         if (len(sell_orders)>0 and open_qty>0) or (len(buy_orders)>0 and open_qty<0):
